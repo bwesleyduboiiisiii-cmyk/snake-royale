@@ -109,6 +109,15 @@
 
   /* ---------- Legend ---------- */
   #legend{position:fixed; right:16px; bottom:16px; z-index:20; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; pointer-events:none; max-width:46vw}
+  #leaderboard{position:fixed; left:16px; top:70px; z-index:20; width:250px; background:rgba(9,9,30,.82); border:1px solid #2c2c5e; border-radius:12px; padding:10px 12px; backdrop-filter:blur(8px); pointer-events:none}
+  #leaderboard.hidden{display:none}
+  .lbtitle{font-family:var(--display); font-size:13px; color:var(--gold); letter-spacing:.04em; margin-bottom:8px; text-align:center}
+  .lbrow{display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; color:var(--ink)}
+  .lbrow img{width:22px;height:22px;border-radius:50%;object-fit:cover;flex:none}
+  .lbdot{width:22px;height:22px;border-radius:50%;background:#333;flex:none}
+  .lbrank{display:inline-block;width:20px;text-align:center;color:var(--muted);font-size:12px}
+  .lbname{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lbwins{color:var(--gold); font-weight:700; font-size:12px}
   .leg{background:rgba(9,9,30,.72); border:1px solid #26264f; border-radius:999px; padding:6px 12px; font-size:12px; display:flex; gap:7px; align-items:center; backdrop-filter:blur(6px)}
   .leg b{font-weight:700}
   .leg.like b{color:var(--magenta)} .leg.share b{color:var(--cyan)} .leg.gift b{color:var(--gold)}
@@ -191,6 +200,7 @@
   </div>
 
   <div id="feed"></div>
+  <div id="leaderboard" class="hidden"></div>
   <div id="legend">
     <span class="leg like">❤ <b>Like</b> = boost</span>
     <span class="leg share">🌹 <b>Rose</b> = shield</span>
@@ -691,7 +701,9 @@ function chooseDir(s,occ){
   const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   const back={x:-s.dir.x,y:-s.dir.y};
   const shielded=s.shieldUntil>now, rampage=s.rampageUntil>now;
-  const target = rampage ? nearestEnemyHead(s) : nearestFood(s);
+  const goldenTarget = (!rampage && golden) ? {x:golden.x,y:golden.y} : null;
+  const target = rampage ? nearestEnemyHead(s) : (goldenTarget || nearestFood(s));
+  const chasingGold = !!goldenTarget && target===goldenTarget;
   const pull=stormT();
   let best=s.dir, bestScore=-1e18;
   for(const d of dirs){
@@ -709,7 +721,7 @@ function chooseDir(s,occ){
       else if(occId && occId!==s.id && !rampage) lethal=true;
     }
     if(lethal) score-=1e9;
-    if(target) score -= manhattan(nx,ny,target.x,target.y);
+    if(target){ const w = chasingGold ? 6 : 1; score -= manhattan(nx,ny,target.x,target.y)*w; }
     // pull toward center as storm tightens
     score -= pull*8 * ((Math.abs((nx+0.5)-CONFIG.COLS/2)+Math.abs((ny+0.5)-CONFIG.ROWS/2))/(CONFIG.COLS+CONFIG.ROWS));
     if(d.x===s.dir.x && d.y===s.dir.y) score+=0.7;      // momentum
@@ -722,7 +734,7 @@ function chooseDir(s,occ){
       const bd=Math.abs(nx-bx)+Math.abs(ny-by);
       if(bd<9) score -= (9-bd)*2.5;
     }
-    score += Math.random()*CONFIG.aiJitter;
+    score += Math.random()*CONFIG.aiJitter*(chasingGold?0.25:1);
     if(score>bestScore){ bestScore=score; best=d; }
   }
   return best;
@@ -811,6 +823,7 @@ function endBattle(){
   }
   phase="winner";
   winnerEndsAt = now + CONFIG.winnerSeconds*1000;
+  if(IS_ENGINE) recordWin(winner);
   spawnConfetti();
   ping("win");
   renderOverlay();
@@ -961,6 +974,7 @@ function playerChip(p){
   return `<div class="player">${av}<span class="nm">${escapeHtml(p.name)}</span>${kick}</div>`;
 }
 function renderOverlay(){
+  renderLeaderboard();
   if(phase==="lobby"){
     const list=[...players.values()].slice(0,40).map(playerChip).join("");
     const cnt=players.size;
@@ -1140,12 +1154,13 @@ function connectSupabase(){
           if(r.kind) handleEvent(r.kind, user, payload);
         })
         .subscribe((st)=>{
-          if(st==="SUBSCRIBED") setStatus("connected", ROLE==="engine" ? "Engine live · viewers can join" : "Live via Supabase Realtime");
+          if(st==="SUBSCRIBED"){ setStatus("connected", ROLE==="engine" ? "Engine live · viewers can join" : "Live via Supabase Realtime"); fetchLeaderboard(); }
           else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT") setStatus("error","Supabase realtime error — retrying…");
         });
     } else {
       sbChan = { }; // control panel doesn't ingest events
       setStatus("connected","Control panel · driving the engine");
+      fetchLeaderboard();
     }
     connectRoom();
     return true;
@@ -1160,10 +1175,35 @@ let mirrorStorm=0, mirrorAlive=0, mirrorTotal=0, mirrorWarn=false;
 let meteor = { phase:"idle", x:0, y:0, r:3, warnUntil:0, hitAt:0 };   // idle|warn|impact
 let nextMeteorAt = 0; const METEOR_EVERY = 17000, METEOR_WARN = 1600, METEOR_R = 3;
 let bolts = [];               // lightning: [{cells:[[x,y]..], warnUntil, strikeUntil}]
-let nextBoltAt = 0; const BOLT_EVERY = 23000, BOLT_WARN = 1300, BOLT_STRIKE = 500, BOLT_COUNT = 3;
+let nextBoltAt = 0; const BOLT_EVERY = 23000, BOLT_WARN = 1300, BOLT_STRIKE = 500, BOLT_COUNT = 5;
 let golden = null;            // {x,y,until}
 let nextGoldenAt = 0; const GOLDEN_EVERY = 26000, GOLDEN_LIFE = 12000, GOLDEN_GROW = 8;
 let mMeteor=null, mBolts=[], mGolden=null; // mirror copies
+
+/* ============================ SEASON LEADERBOARD ============================ */
+let leaderboard = [];   // [{name, avatar, wins}]
+async function fetchLeaderboard(){
+  if(!sb) return;
+  try{
+    const { data } = await sb.from("leaderboard").select("name,avatar,wins").order("wins",{ascending:false}).limit(8);
+    if(data){ leaderboard=data; renderLeaderboard(); }
+  }catch(_){}
+}
+function recordWin(w){
+  if(!sb || !w || !w.id) return;
+  try{ sb.rpc("bump_win",{ p_id:String(w.id), p_name:w.name||"viewer", p_avatar:w.avatar||"" }).then(()=>fetchLeaderboard()).catch(()=>{}); }catch(_){}
+}
+function renderLeaderboard(){
+  const el=document.getElementById("leaderboard"); if(!el) return;
+  if(!leaderboard.length || phase!=="lobby"){ el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  const rows=leaderboard.map((r,i)=>{
+    const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":`<span class="lbrank">${i+1}</span>`;
+    const av = r.avatar ? `<img src="${escapeHtml(r.avatar)}" alt="">` : `<span class="lbdot"></span>`;
+    return `<div class="lbrow">${medal}${av}<span class="lbname">${escapeHtml(r.name||"viewer")}</span><span class="lbwins">${r.wins}🏆</span></div>`;
+  }).join("");
+  el.innerHTML = `<div class="lbtitle">🏆 SEASON LEADERBOARD</div>${rows}`;
+}
 
 function inRadius(x,y,cx,cy,r){ const dx=x-cx, dy=y-cy; return dx*dx+dy*dy <= r*r; }
 
@@ -1188,10 +1228,12 @@ function updateHazards(){
   // ---- LIGHTNING ----
   if(!bolts.length && now>=nextBoltAt && aliveSnakes().length>0){
     for(let i=0;i<BOLT_COUNT;i++){
-      const vertical=Math.random()<0.5;
+      const cx=(Math.random()*CONFIG.COLS)|0, cy=(Math.random()*CONFIG.ROWS)|0;
       const cells=[];
-      if(vertical){ const cx=(Math.random()*CONFIG.COLS)|0; for(let y=0;y<CONFIG.ROWS;y++) cells.push([cx,y]); }
-      else { const cy=(Math.random()*CONFIG.ROWS)|0; for(let x=0;x<CONFIG.COLS;x++) cells.push([x,cy]); }
+      for(const [dx,dy] of [[0,0],[1,0],[0,1],[1,1],[2,0],[0,2]]){
+        const x=cx+dx, y=cy+dy;
+        if(x>=0&&y>=0&&x<CONFIG.COLS&&y<CONFIG.ROWS) cells.push([x,y]);
+      }
       bolts.push({cells, warnUntil:now+BOLT_WARN, strikeUntil:now+BOLT_WARN+BOLT_STRIKE, struck:false});
     }
     ping("share");
@@ -1296,6 +1338,7 @@ function buildSnapshot(){
     meteor: (meteor.phase&&meteor.phase!=="idle") ? { phase:meteor.phase, x:meteor.x, y:meteor.y, r:meteor.r, warnUntil:meteor.warnUntil, hitAt:meteor.hitAt } : null,
     bolts: bolts.map(b=>({ cells:b.cells, warnUntil:b.warnUntil, strikeUntil:b.strikeUntil })),
     golden: golden ? { x:golden.x, y:golden.y } : null,
+    lb: leaderboard,
   };
 }
 function applySnapshot(snap){
@@ -1313,6 +1356,7 @@ function applySnapshot(snap){
   mMeteor = snap.meteor || null;
   mBolts = snap.bolts || [];
   mGolden = snap.golden || null;
+  if(snap.lb){ leaderboard=snap.lb; renderLeaderboard(); }
   safe = snap.safe || safe;
   roundRoster = new Array(snap.total||0);
   foods = (snap.foods||[]).map(a=>({x:a[0],y:a[1]}));
