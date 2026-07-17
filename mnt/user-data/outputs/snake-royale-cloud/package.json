@@ -1,0 +1,10 @@
+{
+  "name": "snake-royale-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Snake Royale for TikTok LIVE — static overlay + Vercel ingest function + Supabase Realtime.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

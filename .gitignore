@@ -1,0 +1,7 @@
+node_modules/
+bridge/node_modules/
+.env
+bridge/.env
+.vercel
+*.log
+.DS_Store

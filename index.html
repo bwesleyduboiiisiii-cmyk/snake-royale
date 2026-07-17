@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Snake Royale — TikTok LIVE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#070714; --deep:#0d0d24; --panel:#121236; --grid:#1c2b52;
+    --ink:#eef0ff; --muted:#8b93c9;
+    --cyan:#39e0ff; --lime:#c6ff3d; --gold:#ffcf3d; --magenta:#ff2d75; --violet:#8a5bff;
+    --ok:#37e39b; --bad:#ff5d6c;
+    --display:"Bungee", system-ui, sans-serif;
+    --ui:"Chakra Petch", ui-monospace, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 700px at 50% -10%, #171742 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 110%, #241350 0%, transparent 55%),
+      var(--void);
+    color:var(--ink); font-family:var(--ui); overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.transparent{background:transparent}
+  #stage{position:fixed; inset:0}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+
+  /* ---------- Host control bar ---------- */
+  #controls{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center;
+    background:rgba(12,12,40,.82); backdrop-filter:blur(10px);
+    border:1px solid #2a2a5e; border-radius:14px; padding:8px 10px;
+    z-index:40; max-width:min(96vw,1100px); box-shadow:0 12px 40px rgba(0,0,0,.5);
+    transition:transform .25s ease, opacity .25s ease;
+  }
+  #controls.hidden{transform:translate(-50%,-140%); opacity:0; pointer-events:none}
+  #controls input[type=text]{
+    background:#0a0a20; border:1px solid #2f2f66; color:var(--ink);
+    border-radius:9px; padding:8px 10px; font-family:var(--ui); font-size:13px; min-width:120px;
+  }
+  #controls input:focus{outline:none; border-color:var(--cyan)}
+  .btn{
+    font-family:var(--ui); font-weight:600; font-size:13px; letter-spacing:.02em;
+    border:1px solid #33336b; background:#1a1a44; color:var(--ink);
+    padding:8px 12px; border-radius:9px; cursor:pointer; white-space:nowrap;
+    transition:transform .08s, background .15s, border-color .15s;
+  }
+  .btn:hover{background:#23235a; border-color:#4a4a92}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg,var(--magenta),#d31659); border-color:#ff5c92; color:#fff}
+  .btn.go{background:linear-gradient(180deg,var(--lime),#8fd400); border-color:#d9ff7a; color:#111}
+  .btn.ghost{background:transparent}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;box-shadow:0 0 8px currentColor}
+  .dot.on{background:var(--ok);color:var(--ok)}
+  .dot.wait{background:var(--gold);color:var(--gold);animation:pulse 1s infinite}
+  .dot.err{background:var(--bad);color:var(--bad)}
+  #statusText{font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sep{width:1px;height:26px;background:#2c2c5e;margin:0 2px}
+  label.toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer}
+  label.toggle input{accent-color:var(--cyan)}
+
+  #showBar{
+    position:fixed; top:8px; left:50%; transform:translateX(-50%);
+    z-index:39; background:rgba(12,12,40,.8); border:1px solid #2a2a5e;
+    border-radius:10px; padding:5px 12px; font-size:12px; color:var(--muted);
+    cursor:pointer; display:none;
+  }
+  #showBar.show{display:block}
+
+  /* ---------- HUD ---------- */
+  .hud{position:fixed; z-index:20; pointer-events:none; font-weight:600}
+  #hudPhase{top:14px; left:16px; display:flex; gap:8px; align-items:center}
+  .pill{background:rgba(9,9,30,.72); border:1px solid #2c2c5e; border-radius:999px;
+        padding:6px 14px; font-size:14px; letter-spacing:.06em; text-transform:uppercase;
+        backdrop-filter:blur(6px)}
+  .pill .accent{color:var(--cyan)}
+  #hudRight{top:14px; right:16px; display:flex; gap:8px; align-items:center; flex-direction:column; align-items:flex-end}
+  #stormWrap{width:190px; background:rgba(9,9,30,.72); border:1px solid #2c2c5e; border-radius:999px; padding:6px 12px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--magenta)}
+  #stormBar{height:5px; background:#2a1030; border-radius:4px; margin-top:5px; overflow:hidden}
+  #stormFill{height:100%; width:0%; background:linear-gradient(90deg,var(--gold),var(--magenta)); transition:width .2s linear}
+
+  /* ---------- Feed ticker ---------- */
+  #feed{position:fixed; left:16px; bottom:16px; z-index:20; width:min(340px,42vw); display:flex; flex-direction:column-reverse; gap:6px; pointer-events:none}
+  .feedItem{background:rgba(9,9,30,.72); border:1px solid #26264f; border-left:3px solid var(--cyan);
+    border-radius:8px; padding:6px 10px; font-size:12.5px; color:var(--ink);
+    display:flex; align-items:center; gap:8px; backdrop-filter:blur(6px);
+    animation:slideIn .25s ease}
+  .feedItem img{width:20px;height:20px;border-radius:50%;object-fit:cover;flex:none}
+  .feedItem.gift{border-left-color:var(--gold)}
+  .feedItem.like{border-left-color:var(--magenta)}
+  .feedItem.share{border-left-color:var(--cyan)}
+  .feedItem.join{border-left-color:var(--lime)}
+
+  /* ---------- Legend ---------- */
+  #legend{position:fixed; right:16px; bottom:16px; z-index:20; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; pointer-events:none; max-width:46vw}
+  .leg{background:rgba(9,9,30,.72); border:1px solid #26264f; border-radius:999px; padding:6px 12px; font-size:12px; display:flex; gap:7px; align-items:center; backdrop-filter:blur(6px)}
+  .leg b{font-weight:700}
+  .leg.like b{color:var(--magenta)} .leg.share b{color:var(--cyan)} .leg.gift b{color:var(--gold)}
+
+  /* ---------- Big center overlays ---------- */
+  #overlay{position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center; pointer-events:none}
+  .card{text-align:center; max-width:92vw}
+  .kicker{font-family:var(--ui); letter-spacing:.35em; text-transform:uppercase; color:var(--cyan); font-size:clamp(12px,1.4vw,16px); margin-bottom:10px}
+  .headline{font-family:var(--display); font-size:clamp(38px,7vw,104px); line-height:.98; letter-spacing:.01em;
+    background:linear-gradient(180deg,#fff, #a9b3ff); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 40px rgba(138,91,255,.35)}
+  .sub{margin-top:14px; font-size:clamp(14px,1.8vw,20px); color:var(--muted); letter-spacing:.02em}
+  .actions{margin-top:22px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
+  .actions .chip{font-family:var(--display); font-size:clamp(13px,1.6vw,18px); padding:10px 18px; border-radius:999px;
+    background:rgba(10,10,30,.6); border:1px solid #33336b}
+  .actions .chip.j{border-color:var(--lime); color:var(--lime)}
+  .actions .chip.l{border-color:var(--magenta); color:var(--magenta)}
+  .actions .chip.s{border-color:var(--cyan); color:var(--cyan)}
+  .actions .chip.g{border-color:var(--gold); color:var(--gold)}
+
+  /* countdown ring */
+  #ring{margin:26px auto 0; width:120px; height:120px; position:relative}
+  #ring svg{transform:rotate(-90deg)}
+  #ringNum{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:var(--display); font-size:44px; color:#fff}
+
+  /* winner */
+  .winAvatar{width:clamp(120px,18vw,210px); height:clamp(120px,18vw,210px); border-radius:50%;
+    margin:0 auto 6px; position:relative; display:flex; align-items:center; justify-content:center;
+    background:conic-gradient(from 0deg,var(--gold),#fff6c9,var(--gold),#ffb03d,var(--gold));
+    box-shadow:0 0 60px rgba(255,207,61,.6); animation:spinRing 6s linear infinite}
+  .winAvatar .inner{width:calc(100% - 14px); height:calc(100% - 14px); border-radius:50%; overflow:hidden; background:#12122e; display:flex; align-items:center; justify-content:center}
+  .winAvatar .inner img{width:100%;height:100%;object-fit:cover}
+  .winAvatar .inner .letter{font-family:var(--display); font-size:clamp(40px,7vw,90px)}
+  .winName{font-family:var(--display); font-size:clamp(26px,4.2vw,58px); margin-top:8px; color:#fff; text-shadow:0 0 30px rgba(255,207,61,.5)}
+  .winStats{margin-top:10px; color:var(--muted); font-size:clamp(13px,1.6vw,18px)}
+
+  .lobbyList{margin:22px auto 0; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:min(880px,92vw); max-height:34vh; overflow:hidden}
+  .player{display:flex; align-items:center; gap:8px; background:rgba(10,10,30,.6); border:1px solid #2c2c5e; border-radius:999px; padding:5px 12px 5px 5px; animation:slideIn .25s ease}
+  .player .av{width:30px;height:30px;border-radius:50%; overflow:hidden; background:#222; display:flex; align-items:center; justify-content:center; flex:none}
+  .player .av img{width:100%;height:100%;object-fit:cover}
+  .player .av .letter{font-family:var(--display); font-size:15px}
+  .player .nm{font-size:13px; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+  /* ---------- Settings modal ---------- */
+  #settings{position:fixed; inset:0; z-index:60; background:rgba(3,3,12,.66); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center}
+  #settings.open{display:flex}
+  .modal{background:var(--panel); border:1px solid #33336b; border-radius:16px; padding:22px; width:min(560px,94vw); max-height:88vh; overflow:auto}
+  .modal h2{font-family:var(--display); font-size:22px; margin:0 0 4px}
+  .modal p.hint{color:var(--muted); font-size:12px; margin:0 0 16px}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .field{display:flex; flex-direction:column; gap:4px}
+  .field label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
+  .field input{background:#0a0a20; border:1px solid #2f2f66; color:var(--ink); border-radius:8px; padding:8px 10px; font-family:var(--ui); font-size:14px}
+  .field.full{grid-column:1/-1}
+  .modalFoot{display:flex; justify-content:flex-end; gap:8px; margin-top:18px}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes slideIn{from{opacity:0; transform:translateY(6px)}to{opacity:1; transform:none}}
+  @keyframes spinRing{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){ .winAvatar{animation:none} }
+  @media (max-width:640px){ #legend{display:none} #feed{width:70vw} }
+</style>
+<!-- Supabase client (cloud mode). If you only run local test bots, this is harmless. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+  /* ===== CLOUD CONFIG — paste your Supabase values here (or pass ?sb=&key= in the URL) ===== */
+  window.SB_URL  = "";  // e.g. https://abcd1234.supabase.co
+  window.SB_ANON = "";  // your project's anon public key
+</script>
+</head>
+<body>
+  <div id="stage"><canvas id="cv"></canvas></div>
+
+  <!-- HUD -->
+  <div class="hud" id="hudPhase"><span class="pill" id="phasePill">LOBBY</span><span class="pill" id="roundPill">Round <span class="accent" id="roundNum">1</span></span></div>
+  <div class="hud" id="hudRight">
+    <span class="pill" id="countPill"><span class="accent" id="aliveNum">0</span> / <span id="totalNum">0</span> snakes</span>
+    <div id="stormWrap" style="display:none">⚡ Storm closing<div id="stormBar"><div id="stormFill"></div></div></div>
+  </div>
+
+  <div id="feed"></div>
+  <div id="legend">
+    <span class="leg like">❤ <b>Like</b> = boost</span>
+    <span class="leg share">↗ <b>Share</b> = shield</span>
+    <span class="leg gift">💎 <b>Gift</b> = grow / rampage</span>
+  </div>
+
+  <!-- Big overlays -->
+  <div id="overlay"></div>
+
+  <!-- Host controls -->
+  <div id="controls">
+    <span class="dot" id="connDot" title="connection"></span>
+    <input type="text" id="userInput" placeholder="@tiktok_username" autocomplete="off" spellcheck="false" />
+    <button class="btn primary" id="connectBtn">Connect</button>
+    <span id="statusText">Enter the live host’s @username.</span>
+    <span class="sep"></span>
+    <button class="btn go" id="startBtn">Start now</button>
+    <button class="btn" id="skipBtn">Skip round</button>
+    <span class="sep"></span>
+    <label class="toggle"><input type="checkbox" id="simChk" /> Test bots</label>
+    <button class="btn ghost" id="soundBtn" title="sound">🔇</button>
+    <button class="btn ghost" id="gearBtn" title="settings">⚙</button>
+    <button class="btn ghost" id="hideBtn" title="hide controls (H)">Hide</button>
+  </div>
+  <div id="showBar">◂ Show controls (H)</div>
+
+  <!-- Settings -->
+  <div id="settings">
+    <div class="modal">
+      <h2>Game settings</h2>
+      <p class="hint">Changes apply to the next round. Nothing is saved to disk — reload resets to defaults (or pass them as URL options).</p>
+      <div class="grid2">
+        <div class="field full"><label>Bridge WebSocket URL</label><input id="setWs" type="text" /></div>
+        <div class="field"><label>Join window (seconds)</label><input id="setLobby" type="number" min="10" max="600" /></div>
+        <div class="field"><label>Winner screen (seconds)</label><input id="setWinner" type="number" min="3" max="60" /></div>
+        <div class="field"><label>Min players to start</label><input id="setMin" type="number" min="1" max="30" /></div>
+        <div class="field"><label>Max snakes per round</label><input id="setMax" type="number" min="2" max="60" /></div>
+        <div class="field"><label>Snake speed (ms/step, lower=faster)</label><input id="setTick" type="number" min="50" max="300" /></div>
+        <div class="field"><label>Likes per growth</label><input id="setLikeGrow" type="number" min="1" max="500" /></div>
+        <div class="field"><label>Gift diamonds → shield</label><input id="setShieldD" type="number" min="1" max="1000" /></div>
+        <div class="field"><label>Gift diamonds → RAMPAGE</label><input id="setRampD" type="number" min="1" max="10000" /></div>
+        <div class="field full"><label>Join keywords (comma separated)</label><input id="setWords" type="text" /></div>
+        <div class="field full"><label class="toggle"><input id="setAuto" type="checkbox" /> Auto-join anyone who likes/comments/shares/gifts</label></div>
+      </div>
+      <div class="modalFoot">
+        <button class="btn" id="setCancel">Close</button>
+        <button class="btn primary" id="setSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================ CONFIG ============================ */
+const params = new URLSearchParams(location.search);
+const CONFIG = {
+  COLS:52, ROWS:30,
+  tickMs:110,
+  lobbySeconds:60,
+  winnerSeconds:9,
+  minPlayers:2,
+  maxPlayers:30,
+  startLen:4,
+  foodCount:14,
+  shieldMs:6000,
+  rampageMs:6000,
+  shieldDiamonds:10,
+  rampageDiamonds:100,
+  likesPerGrow:30,
+  stormStartSec:15,
+  stormFullSec:95,
+  hardCapSec:135,
+  joinWords:["join","play","snake","in"],
+  autoJoin:true,
+  wsUrl: params.get("ws") || "ws://localhost:8081",
+  // Supabase (cloud mode). Fill SB_URL/SB_ANON below, or pass ?sb=...&key=... in the URL.
+  sbUrl: params.get("sb") || (window.SB_URL || ""),
+  sbAnon: params.get("key") || (window.SB_ANON || ""),
+};
+if(params.get("bg")==="transparent") document.body.classList.add("transparent");
+
+/* ============================ STATE ============================ */
+let now = performance.now();
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W=0,H=0,dpr=1,cell=0,ox=0,oy=0;
+
+let phase = "lobby";        // lobby | battle | winner
+let round = 0;
+let lobbyEndsAt = 0, winnerEndsAt = 0, battleStart = 0, lastTick = 0;
+let winner = null;
+
+const players = new Map();   // id -> {id,name,avatar,color,likeAccum}
+let snakes = [];             // active this round
+let roundRoster = [];        // participants of current battle (for winner-by-score)
+let foods = [];
+let safe = {x0:0,y0:0,x1:CONFIG.COLS,y1:CONFIG.ROWS};
+let confetti = [];
+let soundOn = false;
+
+/* ============================ UTIL ============================ */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const manhattan=(ax,ay,bx,by)=>Math.abs(ax-bx)+Math.abs(ay-by);
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function colorFor(id){
+  const hue=hash(id)%360;
+  return { hue, body:`hsl(${hue} 85% 60%)`, dim:`hsl(${hue} 70% 45%)`, glow:`hsl(${hue} 95% 65%)` };
+}
+function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
+
+/* avatar image cache (display only; never read back so cross-origin is fine) */
+const imgCache=new Map();
+function getAvatar(url){
+  if(!url) return null;
+  let e=imgCache.get(url);
+  if(!e){ e={img:new Image(),ok:false}; e.img.onload=()=>{e.ok=true;}; e.img.onerror=()=>{e.ok=false;}; e.img.src=url; imgCache.set(url,e); }
+  return e.ok? e.img : null;
+}
+/* generated fallback avatar for test bots (offline-safe data URI) */
+function botAvatar(id,name){
+  const c=colorFor(id);
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'>
+    <rect width='96' height='96' fill='hsl(${c.hue} 45% 22%)'/>
+    <circle cx='48' cy='38' r='20' fill='hsl(${c.hue} 80% 60%)'/>
+    <rect x='20' y='60' width='56' height='40' rx='20' fill='hsl(${c.hue} 70% 50%)'/>
+    <text x='48' y='55' font-family='sans-serif' font-size='34' font-weight='bold' fill='#0b0b1e' text-anchor='middle'>${initial(name)}</text>
+  </svg>`;
+  return "data:image/svg+xml;utf8,"+encodeURIComponent(svg);
+}
+
+/* ============================ AUDIO (optional, muted by default) ============================ */
+let actx=null;
+function beep(freq,dur,type,vol){
+  if(!soundOn) return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"triangle"; o.frequency.value=freq;
+    g.gain.value=vol||0.05; o.connect(g); g.connect(actx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+(dur||0.15)); o.stop(actx.currentTime+(dur||0.15));
+  }catch(_){}
+}
+function ping(kind){
+  if(kind==="join") beep(660,.12,"sine",.04);
+  else if(kind==="big") beep(180,.25,"sawtooth",.06);
+  else if(kind==="win"){ beep(523,.15,"square",.05); setTimeout(()=>beep(659,.15,"square",.05),140); setTimeout(()=>beep(784,.3,"square",.05),300); }
+}
+
+/* ============================ SIZING ============================ */
+function resize(){
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.floor(W*dpr); cv.height = Math.floor(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const pad = 24;
+  cell = Math.min((W-pad*2)/CONFIG.COLS, (H-pad*2)/CONFIG.ROWS);
+  ox = (W - cell*CONFIG.COLS)/2;
+  oy = (H - cell*CONFIG.ROWS)/2;
+}
+window.addEventListener("resize", resize);
+
+const c2p=(x,y)=>({ x: ox + x*cell + cell/2, y: oy + y*cell + cell/2 });
+
+/* ============================ STORM ============================ */
+function battleElapsed(){ return (now - battleStart)/1000; }
+function stormT(){
+  if(phase!=="battle") return 0;
+  const e=battleElapsed();
+  return clamp((e - CONFIG.stormStartSec)/(CONFIG.stormFullSec - CONFIG.stormStartSec), 0, 1);
+}
+function updateStorm(){
+  const t=stormT();
+  const cx=CONFIG.COLS/2, cy=CONFIG.ROWS/2;
+  const hx=lerp(CONFIG.COLS/2, CONFIG.COLS*0.11, t);
+  const hy=lerp(CONFIG.ROWS/2, CONFIG.ROWS*0.11, t);
+  safe={x0:cx-hx, y0:cy-hy, x1:cx+hx, y1:cy+hy};
+}
+function isStorm(x,y){
+  const cx=x+0.5, cy=y+0.5;
+  return cx<safe.x0 || cx>safe.x1 || cy<safe.y0 || cy>safe.y1;
+}
+function randSafeCell(){
+  const x0=Math.ceil(safe.x0), x1=Math.floor(safe.x1)-1;
+  const y0=Math.ceil(safe.y0), y1=Math.floor(safe.y1)-1;
+  return { x: clamp((x0+Math.random()*(Math.max(1,x1-x0)))|0,0,CONFIG.COLS-1),
+           y: clamp((y0+Math.random()*(Math.max(1,y1-y0)))|0,0,CONFIG.ROWS-1) };
+}
+
+/* ============================ FOOD ============================ */
+function spawnFood(){
+  for(let tries=0;tries<40;tries++){
+    const p=randSafeCell();
+    if(isStorm(p.x,p.y)) continue;
+    if(foods.some(f=>f.x===p.x&&f.y===p.y)) continue;
+    if(snakes.some(s=>s.alive&&s.cells.some(c=>c.x===p.x&&c.y===p.y))) continue;
+    foods.push(p); return;
+  }
+}
+
+/* ============================ PLAYERS / EVENTS ============================ */
+function ensurePlayer(user){
+  let p=players.get(user.id);
+  if(!p){
+    p={ id:user.id, name:user.name||"Someone", avatar:user.avatar||"", color:colorFor(user.id), likeAccum:0 };
+    players.set(user.id,p);
+    addFeed("join", p, p.name+" joined!");
+    ping("join");
+  } else {
+    if(user.avatar) p.avatar=user.avatar;
+    if(user.name) p.name=user.name;
+  }
+  return p;
+}
+function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
+function isJoinWord(txt){
+  const t=(txt||"").toLowerCase().trim();
+  return CONFIG.joinWords.some(w=> t===w || t.split(/\s+/).includes(w));
+}
+
+function handleEvent(kind,user,payload){
+  payload=payload||{};
+  // registration rules
+  if(kind==="gift"||kind==="share"||kind==="follow"||kind==="join") ensurePlayer(user);
+  else if(kind==="chat"){ if(isJoinWord(payload.comment)) ensurePlayer(user); }
+  else if(kind==="like"){ if(CONFIG.autoJoin) ensurePlayer(user); }
+
+  const p=players.get(user.id);
+  if(!p) return;
+
+  if(phase==="battle"){
+    const s=snakeOf(p.id);
+    if(kind==="like"){
+      if(s){
+        s.boostSteps=Math.min(6, s.boostSteps+Math.ceil((payload.likeCount||1)/5));
+        p.likeAccum+=(payload.likeCount||1);
+        while(p.likeAccum>=CONFIG.likesPerGrow){ p.likeAccum-=CONFIG.likesPerGrow; s.pendingGrow++; }
+      }
+    } else if(kind==="share"){
+      if(s){ s.shieldUntil=now+CONFIG.shieldMs; addFeed("share",p,p.name+" is shielded"); }
+    } else if(kind==="gift"){
+      const val=(payload.diamonds||0)*(payload.repeat||1);
+      if(s){
+        s.score+=Math.max(1,Math.round(val));
+        if(val>=CONFIG.rampageDiamonds){
+          s.rampageUntil=now+CONFIG.rampageMs; s.shieldUntil=Math.max(s.shieldUntil, now+1600);
+          addFeed("gift",p,"🔥 "+p.name+" RAMPAGE! ("+(payload.giftName||"gift")+")"); ping("big");
+        } else if(val>=CONFIG.shieldDiamonds){
+          s.shieldUntil=now+CONFIG.shieldMs; addFeed("gift",p,"💎 "+p.name+" → shield");
+        } else {
+          s.boostSteps=Math.min(6,s.boostSteps+2); s.pendingGrow+=2; addFeed("gift",p,"💎 "+p.name+" → grow");
+        }
+      } else {
+        addFeed("gift",p,"💎 "+p.name+" gifted — in next round");
+      }
+    }
+  } else if(kind==="gift"){
+    addFeed("gift",p,"💎 "+p.name+" gifted — joins next round");
+  }
+}
+
+/* ============================ SNAKE ENGINE ============================ */
+function newSnake(p){
+  const start=randSafeCell();
+  const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+  const dir=dirs[(Math.random()*4)|0];
+  const cells=[];
+  for(let i=0;i<CONFIG.startLen;i++){
+    cells.push({ x:clamp(start.x - dir.x*i,0,CONFIG.COLS-1), y:clamp(start.y - dir.y*i,0,CONFIG.ROWS-1) });
+  }
+  return {
+    id:p.id, name:p.name, avatar:p.avatar, color:p.color,
+    cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0,
+    shieldUntil:0, rampageUntil:0,
+  };
+}
+function aliveSnakes(){ return snakes.filter(s=>s.alive); }
+
+function buildOccupancy(){
+  const occ=new Map();
+  for(const s of snakes){ if(!s.alive) continue; for(const c of s.cells){ occ.set(c.x+","+c.y, s.id); } }
+  return occ;
+}
+function freeNeighbors(x,y,occ){
+  let n=0;
+  const dd=[[1,0],[-1,0],[0,1],[0,-1]];
+  for(const [dx,dy] of dd){
+    const nx=x+dx, ny=y+dy;
+    if(nx<0||ny<0||nx>=CONFIG.COLS||ny>=CONFIG.ROWS) continue;
+    if(isStorm(nx,ny)) continue;
+    if(occ.get(nx+","+ny)) continue;
+    n++;
+  }
+  return n;
+}
+function nearestFood(s){
+  let best=null,bd=1e9;
+  for(const f of foods){ const d=manhattan(s.head.x,s.head.y,f.x,f.y); if(d<bd){bd=d;best=f;} }
+  return best;
+}
+function nearestEnemyHead(s){
+  let best=null,bd=1e9;
+  for(const o of snakes){ if(!o.alive||o.id===s.id) continue; const d=manhattan(s.head.x,s.head.y,o.head.x,o.head.y); if(d<bd){bd=d;best=o.head;} }
+  return best;
+}
+function chooseDir(s,occ){
+  const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+  const back={x:-s.dir.x,y:-s.dir.y};
+  const shielded=s.shieldUntil>now, rampage=s.rampageUntil>now;
+  const target = rampage ? nearestEnemyHead(s) : nearestFood(s);
+  const pull=stormT();
+  let best=s.dir, bestScore=-1e18;
+  for(const d of dirs){
+    if(d.x===back.x && d.y===back.y) continue;
+    const nx=s.head.x+d.x, ny=s.head.y+d.y;
+    let score=0;
+    const outWall=nx<0||ny<0||nx>=CONFIG.COLS||ny>=CONFIG.ROWS;
+    const inStorm=isStorm(nx,ny);
+    const occId=occ.get(nx+","+ny);
+    let lethal=false;
+    if(outWall) lethal=true;
+    else if(!shielded){
+      if(inStorm) lethal=true;
+      else if(occId===s.id) lethal=true;
+      else if(occId && occId!==s.id && !rampage) lethal=true;
+    }
+    if(lethal) score-=1e9;
+    if(target) score -= manhattan(nx,ny,target.x,target.y);
+    // pull toward center as storm tightens
+    score -= pull*8 * ((Math.abs((nx+0.5)-CONFIG.COLS/2)+Math.abs((ny+0.5)-CONFIG.ROWS/2))/(CONFIG.COLS+CONFIG.ROWS));
+    if(d.x===s.dir.x && d.y===s.dir.y) score+=0.7;      // momentum
+    if(!outWall) score += freeNeighbors(nx,ny,occ)*0.5;  // avoid dead ends
+    score += Math.random()*0.6;
+    if(score>bestScore){ bestScore=score; best=d; }
+  }
+  return best;
+}
+function killSnake(s,cause){
+  if(!s.alive) return;
+  s.alive=false; s.deadAt=now;
+}
+function stepSnake(s,occ){
+  const d=chooseDir(s,occ); s.dir=d;
+  const nx=s.head.x+d.x, ny=s.head.y+d.y;
+  const shielded=s.shieldUntil>now, rampage=s.rampageUntil>now;
+  if(nx<0||ny<0||nx>=CONFIG.COLS||ny>=CONFIG.ROWS){ killSnake(s,"wall"); return; }
+  if(!shielded && isStorm(nx,ny)){ killSnake(s,"storm"); return; }
+  const occId=occ.get(nx+","+ny);
+  if(occId && occId!==s.id){
+    if(rampage){
+      const victim=snakes.find(z=>z.id===occId && z.alive);
+      if(victim){ killSnake(victim,"rampage"); s.score+=5; addFeed("gift",players.get(s.id),s.name+" devoured "+victim.name+"! 🔥"); }
+      // remove victim cells from occ so we can pass
+      if(victim){ for(const c of victim.cells) occ.delete(c.x+","+c.y); }
+    } else if(!shielded){ killSnake(s,"crash"); return; }
+  } else if(occId===s.id && !shielded){ killSnake(s,"self"); return; }
+  // advance
+  s.cells.unshift({x:nx,y:ny}); s.head=s.cells[0];
+  occ.set(nx+","+ny,s.id);
+  // food
+  const fi=foods.findIndex(f=>f.x===nx&&f.y===ny);
+  if(fi>=0){ foods.splice(fi,1); s.score+=1; s.pendingGrow++; spawnFood(); }
+  let grow=false;
+  if(s.pendingGrow>0){ s.pendingGrow--; grow=true; }
+  if(!grow){ const tail=s.cells.pop(); if(tail && occ.get(tail.x+","+tail.y)===s.id) occ.delete(tail.x+","+tail.y); }
+}
+function tick(){
+  if(phase!=="battle") return;
+  for(const s of snakes){ if(s.alive) s.prevCells=s.cells.map(c=>({x:c.x,y:c.y})); }
+  updateStorm();
+  const order=shuffle(aliveSnakes());
+  const occ=buildOccupancy();
+  for(const s of order){
+    if(!s.alive) continue;
+    const steps=1+(s.boostSteps>0?1:0);
+    if(s.boostSteps>0) s.boostSteps--;
+    for(let k=0;k<steps;k++){ if(!s.alive) break; stepSnake(s,occ); }
+  }
+  while(foods.length<CONFIG.foodCount) spawnFood();
+  // remove long-dead snakes
+  snakes = snakes.filter(s=>s.alive || (now-s.deadAt)<650);
+  const alive=aliveSnakes();
+  if(alive.length<=1 || battleElapsed()>CONFIG.hardCapSec) endBattle();
+}
+
+/* ============================ PHASE MACHINE ============================ */
+function startLobby(){
+  phase="lobby";
+  lobbyEndsAt = now + CONFIG.lobbySeconds*1000;
+  snakes=[]; foods=[]; confetti=[]; winner=null;
+  renderOverlay();
+}
+function startBattle(){
+  const roster=[...players.values()].slice(0, CONFIG.maxPlayers);
+  if(roster.length===0){ startLobby(); return; }
+  round++;
+  document.getElementById("roundNum").textContent=round;
+  phase="battle"; battleStart=now; lastTick=now;
+  updateStorm();
+  snakes = roster.map(p=>newSnake(p));
+  roundRoster = snakes.slice();
+  foods=[]; while(foods.length<CONFIG.foodCount) spawnFood();
+  renderOverlay();
+  if(snakes.length===1){ endBattle(); }
+}
+function endBattle(){
+  const alive=aliveSnakes();
+  if(alive.length===1) winner=alive[0];
+  else {
+    // highest score among this round's participants
+    let best=null;
+    for(const s of roundRoster){ if(!best || s.score>best.score) best=s; }
+    winner=best;
+  }
+  phase="winner";
+  winnerEndsAt = now + CONFIG.winnerSeconds*1000;
+  spawnConfetti();
+  ping("win");
+  renderOverlay();
+}
+
+/* ============================ CONFETTI ============================ */
+function spawnConfetti(){
+  confetti=[];
+  const colors=["#ffcf3d","#ff2d75","#39e0ff","#c6ff3d","#8a5bff","#ffffff"];
+  for(let i=0;i<160;i++){
+    confetti.push({ x:W/2+rnd(-60,60), y:H*0.32, vx:rnd(-6,6), vy:rnd(-13,-4),
+      g:rnd(0.15,0.3), size:rnd(4,9), col:colors[(Math.random()*colors.length)|0], rot:rnd(0,6.28), vr:rnd(-0.3,0.3), life:0 });
+  }
+}
+function updateConfetti(dt){
+  for(const c of confetti){ c.vy+=c.g; c.x+=c.vx; c.y+=c.vy; c.rot+=c.vr; c.life+=dt; }
+  confetti=confetti.filter(c=>c.y<H+40 && c.life<6000);
+}
+
+/* ============================ RENDER ============================ */
+function drawArena(){
+  ctx.clearRect(0,0,W,H);
+  if(!document.body.classList.contains("transparent")){
+    ctx.fillStyle="#08081a";
+    roundRect(ox-6,oy-6,cell*CONFIG.COLS+12,cell*CONFIG.ROWS+12,14); ctx.fill();
+  }
+  // grid
+  ctx.strokeStyle="rgba(57,224,255,0.06)"; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let x=0;x<=CONFIG.COLS;x++){ const px=ox+x*cell; ctx.moveTo(px,oy); ctx.lineTo(px,oy+cell*CONFIG.ROWS); }
+  for(let y=0;y<=CONFIG.ROWS;y++){ const py=oy+y*cell; ctx.moveTo(ox,py); ctx.lineTo(ox+cell*CONFIG.COLS,py); }
+  ctx.stroke();
+  // arena border
+  ctx.strokeStyle="rgba(138,91,255,0.35)"; ctx.lineWidth=2;
+  roundRect(ox,oy,cell*CONFIG.COLS,cell*CONFIG.ROWS,10); ctx.stroke();
+}
+function drawStorm(){
+  if(phase!=="battle") return;
+  const t=stormT();
+  if(t<=0) return;
+  // shade the danger zone
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ox,oy,cell*CONFIG.COLS,cell*CONFIG.ROWS);
+  const sx=ox+clamp(safe.x0,0,CONFIG.COLS)*cell, sy=oy+clamp(safe.y0,0,CONFIG.ROWS)*cell;
+  const sw=clamp(safe.x1-safe.x0,0,CONFIG.COLS)*cell, sh=clamp(safe.y1-safe.y0,0,CONFIG.ROWS)*cell;
+  ctx.rect(sx+sw,sy,-sw,sh); // reverse -> even-odd hole
+  ctx.fillStyle="rgba(255,45,117,"+(0.10+0.10*Math.sin(now/250))+")";
+  ctx.fill("evenodd");
+  ctx.restore();
+  // safe border
+  ctx.strokeStyle="rgba(255,207,61,0.85)"; ctx.lineWidth=2.5;
+  ctx.setLineDash([8,6]); ctx.lineDashOffset=-now/40;
+  roundRect(sx,sy,sw,sh,6); ctx.stroke(); ctx.setLineDash([]);
+}
+function drawFood(){
+  const r=cell*0.24;
+  for(const f of foods){
+    const p=c2p(f.x,f.y);
+    const pulse=1+0.18*Math.sin(now/220 + f.x + f.y);
+    ctx.beginPath(); ctx.arc(p.x,p.y,r*pulse,0,7);
+    ctx.fillStyle="#c6ff3d"; ctx.shadowColor="#c6ff3d"; ctx.shadowBlur=12; ctx.fill(); ctx.shadowBlur=0;
+  }
+}
+function interpCell(s,i,t){
+  const cur=s.cells[i];
+  const prev=(s.prevCells&&s.prevCells[i])||cur;
+  return { x: lerp(prev.x,cur.x,t), y: lerp(prev.y,cur.y,t) };
+}
+function drawSnake(s){
+  const t = phase==="battle" && s.alive ? clamp((now-lastTick)/CONFIG.tickMs,0,1) : 1;
+  const deadFade = s.alive?1: clamp(1-(now-s.deadAt)/650,0,1);
+  ctx.globalAlpha = deadFade;
+  const rBody=cell*0.40;
+  // body (tail -> neck)
+  for(let i=s.cells.length-1;i>=1;i--){
+    const ic=interpCell(s,i,t); const p=c2p(ic.x,ic.y);
+    const fade = 0.35 + 0.55*(1 - i/s.cells.length);
+    ctx.globalAlpha = deadFade*fade;
+    ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
+    ctx.fillStyle=s.color.body; ctx.fill();
+  }
+  ctx.globalAlpha=deadFade;
+  // head
+  const hc=interpCell(s,0,t); const hp=c2p(hc.x,hc.y);
+  const rHead=cell*0.62;
+  const shielded=s.shieldUntil>now, rampage=s.rampageUntil>now;
+  // aura
+  if(rampage){
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+6+2*Math.sin(now/90),0,7);
+    ctx.fillStyle="rgba(255,120,40,0.30)"; ctx.fill();
+  } else if(shielded){
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+5,0,7);
+    ctx.strokeStyle="rgba(57,224,255,"+(0.6+0.3*Math.sin(now/120))+")"; ctx.lineWidth=3; ctx.stroke();
+  }
+  // ring
+  ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+2,0,7);
+  ctx.fillStyle= rampage? "#ff9a3d" : s.color.glow; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=14; ctx.fill(); ctx.shadowBlur=0;
+  // avatar or fallback
+  const img=getAvatar(s.avatar);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead,0,7); ctx.closePath(); ctx.clip();
+  if(img){
+    const iw=img.naturalWidth||1, ih=img.naturalHeight||1;
+    const scale=Math.max((rHead*2)/iw,(rHead*2)/ih);
+    const dw=iw*scale, dh=ih*scale;
+    try{ ctx.drawImage(img,hp.x-dw/2,hp.y-dh/2,dw,dh); }catch(_){ fillHead(); }
+  } else { fillHead(); }
+  ctx.restore();
+  function fillHead(){
+    ctx.fillStyle=s.color.dim; ctx.fillRect(hp.x-rHead,hp.y-rHead,rHead*2,rHead*2);
+    ctx.fillStyle="#0b0b1e"; ctx.font="bold "+Math.round(rHead*1.1)+"px Bungee, sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(initial(s.name),hp.x,hp.y+2);
+  }
+  // name label
+  if(s.alive){
+    ctx.font="600 "+clamp(cell*0.42,9,15)+"px 'Chakra Petch', sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="bottom";
+    const label=s.name.length>14? s.name.slice(0,13)+"…" : s.name;
+    const tw=ctx.measureText(label).width;
+    ctx.fillStyle="rgba(6,6,20,0.7)";
+    roundRect(hp.x-tw/2-6, hp.y-rHead-20, tw+12, 16, 6); ctx.fill();
+    ctx.fillStyle="#eef0ff"; ctx.fillText(label,hp.x,hp.y-rHead-6);
+  }
+  ctx.globalAlpha=1;
+}
+function drawConfetti(){
+  for(const c of confetti){
+    ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot);
+    ctx.fillStyle=c.col; ctx.fillRect(-c.size/2,-c.size/2,c.size,c.size*0.6); ctx.restore();
+  }
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+/* ============================ DOM OVERLAYS ============================ */
+const overlay=document.getElementById("overlay");
+function playerChip(p){
+  const av = p.avatar
+    ? `<div class="av"><img src="${escapeHtml(p.avatar)}" alt=""></div>`
+    : `<div class="av"><span class="letter" style="color:${p.color.glow}">${initial(p.name)}</span></div>`;
+  return `<div class="player">${av}<span class="nm">${escapeHtml(p.name)}</span></div>`;
+}
+function renderOverlay(){
+  if(phase==="lobby"){
+    const list=[...players.values()].slice(0,40).map(playerChip).join("");
+    const cnt=players.size;
+    overlay.innerHTML=`<div class="card">
+      <div class="kicker">Snake Royale · Round ${round+1}</div>
+      <div class="headline">WHO WANTS<br>TO JOIN?</div>
+      <div class="sub">Comment <b style="color:var(--lime)">JOIN</b> to drop in — then keep interacting to power up your snake</div>
+      <div class="actions">
+        <span class="chip j">JOIN = play</span>
+        <span class="chip l">❤ LIKE = boost</span>
+        <span class="chip s">↗ SHARE = shield</span>
+        <span class="chip g">💎 GIFT = rampage</span>
+      </div>
+      <div id="ring">
+        <svg width="120" height="120"><circle cx="60" cy="60" r="52" stroke="#26264f" stroke-width="8" fill="none"/>
+        <circle id="ringArc" cx="60" cy="60" r="52" stroke="var(--lime)" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="0"/></svg>
+        <div id="ringNum">–</div>
+      </div>
+      <div class="lobbyList">${list || `<span class="sub">No players yet — be the first!</span>`}</div>
+    </div>`;
+  } else if(phase==="winner" && winner){
+    const p=players.get(winner.id)||winner;
+    const inner = p.avatar
+      ? `<div class="inner"><img src="${escapeHtml(p.avatar)}" alt=""></div>`
+      : `<div class="inner"><span class="letter" style="color:${winner.color.glow}">${initial(winner.name)}</span></div>`;
+    overlay.innerHTML=`<div class="card">
+      <div class="kicker">Round ${round} champion</div>
+      <div class="winAvatar">${inner}</div>
+      <div class="winName">${escapeHtml(winner.name)}</div>
+      <div class="headline" style="font-size:clamp(28px,5vw,64px);margin-top:6px">WINNER 👑</div>
+      <div class="winStats">Length ${winner.cells.length} · Score ${winner.score} · beat ${Math.max(0,roundRoster.length-1)} challengers</div>
+      <div class="sub" id="nextIn">Next game starting…</div>
+    </div>`;
+  } else {
+    overlay.innerHTML="";
+  }
+}
+function updateOverlayLive(){
+  if(phase==="lobby"){
+    const secs=Math.max(0, Math.ceil((lobbyEndsAt-now)/1000));
+    const numEl=document.getElementById("ringNum");
+    const arc=document.getElementById("ringArc");
+    if(numEl){
+      if(players.size<CONFIG.minPlayers && secs<=0) numEl.textContent="⏳";
+      else numEl.textContent=secs;
+    }
+    if(arc){
+      const frac=clamp((lobbyEndsAt-now)/(CONFIG.lobbySeconds*1000),0,1);
+      arc.style.strokeDashoffset=(326.7*(1-frac)).toFixed(1);
+    }
+  } else if(phase==="winner"){
+    const el=document.getElementById("nextIn");
+    if(el){ const s=Math.max(0,Math.ceil((winnerEndsAt-now)/1000)); el.textContent=`Next game in ${s}s — comment JOIN to play`; }
+  }
+}
+
+/* feed */
+const feedEl=document.getElementById("feed");
+function addFeed(kind,p,text){
+  const div=document.createElement("div");
+  div.className="feedItem "+kind;
+  const av = p && p.avatar ? `<img src="${escapeHtml(p.avatar)}" alt="">` : "";
+  div.innerHTML=av+`<span>${escapeHtml(text)}</span>`;
+  feedEl.appendChild(div);
+  while(feedEl.children.length>7) feedEl.removeChild(feedEl.firstChild);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ============================ MAIN LOOP ============================ */
+let lastFrame=performance.now();
+function loop(){
+  now=performance.now();
+  const dt=now-lastFrame; lastFrame=now;
+
+  // phase timers
+  if(phase==="lobby"){
+    if(now>=lobbyEndsAt){
+      if(players.size>=CONFIG.minPlayers) startBattle();
+      else lobbyEndsAt=now+8000; // extend, wait for players
+    }
+  } else if(phase==="battle"){
+    while(now-lastTick>=CONFIG.tickMs){ lastTick+=CONFIG.tickMs; tick(); if(phase!=="battle") break; }
+  } else if(phase==="winner"){
+    if(now>=winnerEndsAt) startLobby();
+  }
+  updateConfetti(dt);
+
+  // HUD
+  document.getElementById("phasePill").textContent = phase==="battle"?"BATTLE":phase.toUpperCase();
+  document.getElementById("aliveNum").textContent = phase==="battle"? aliveSnakes().length : players.size;
+  document.getElementById("totalNum").textContent = phase==="battle"? roundRoster.length : players.size;
+  const stormWrap=document.getElementById("stormWrap");
+  if(phase==="battle"){ stormWrap.style.display="block"; document.getElementById("stormFill").style.width=(stormT()*100).toFixed(0)+"%"; }
+  else stormWrap.style.display="none";
+
+  // draw
+  drawArena();
+  drawStorm();
+  if(phase==="battle") drawFood();
+  for(const s of snakes) drawSnake(s);
+  if(phase==="winner") drawConfetti();
+
+  updateOverlayLive();
+  requestAnimationFrame(loop);
+}
+
+/* ============================ TIKTOK BRIDGE (WebSocket client) ============================ */
+let ws=null, wsReconnect=null, wantUser="";
+const connDot=document.getElementById("connDot");
+const statusText=document.getElementById("statusText");
+function setStatus(state,msg){
+  connDot.className="dot "+(state==="connected"?"on":state==="connecting"||state==="idle"?"wait":state==="error"||state==="offline"?"err":"");
+  if(msg) statusText.textContent=msg;
+}
+function connectBridge(){
+  try{ if(ws) ws.close(); }catch(_){}
+  setStatus("connecting","Connecting to bridge…");
+  ws=new WebSocket(CONFIG.wsUrl);
+  ws.onopen=()=>{ setStatus("connecting","Bridge connected. Connecting to live…"); if(wantUser) ws.send(JSON.stringify({cmd:"connect",username:wantUser})); };
+  ws.onclose=()=>{ setStatus("error","Bridge offline — is bridge.js running?"); scheduleReconnect(); };
+  ws.onerror=()=>{ setStatus("error","Can't reach bridge at "+CONFIG.wsUrl); };
+  ws.onmessage=(ev)=>{
+    let m; try{ m=JSON.parse(ev.data); }catch{ return; }
+    if(m.type==="status"){ setStatus(m.state,m.message||""); }
+    else if(m.type==="event"){ handleEvent(m.kind, m.user||{}, m); }
+  };
+}
+function scheduleReconnect(){ clearTimeout(wsReconnect); wsReconnect=setTimeout(()=>{ if(wantUser||simOn===false) connectBridge(); },3000); }
+
+/* ============================ SUPABASE REALTIME (cloud mode) ============================ */
+let sb=null, sbChan=null;
+function connectSupabase(){
+  if(!CONFIG.sbUrl || !CONFIG.sbAnon){ return false; }
+  if(!window.supabase || !window.supabase.createClient){ setStatus("error","supabase-js failed to load"); return false; }
+  try{
+    sb = window.supabase.createClient(CONFIG.sbUrl, CONFIG.sbAnon, { realtime:{ params:{ eventsPerSecond:20 } } });
+    setStatus("connecting","Connecting to Supabase…");
+    sbChan = sb.channel("snake-events")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"events" }, (msg)=>{
+        const r = msg.new || {};
+        const user = { id:r.user_id||("u_"+Math.random().toString(36).slice(2)), name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(r.user_id||"x", r.user_name||"viewer") };
+        const payload = (r.payload && typeof r.payload==="object") ? r.payload : {};
+        if(r.kind) handleEvent(r.kind, user, payload);
+      })
+      .subscribe((st)=>{
+        if(st==="SUBSCRIBED") setStatus("connected","Live via Supabase Realtime");
+        else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT") setStatus("error","Supabase realtime error — retrying…");
+      });
+    return true;
+  }catch(e){ setStatus("error","Supabase init failed: "+(e&&e.message||e)); return false; }
+}
+
+/* ============================ TEST BOTS (works fully offline) ============================ */
+let simOn=false, simTimers=[];
+const botNames=["Ava","Kai","Zoe","Milo","Nova","Rex","Luna","Finn","Iris","Dex","Remy","Sage","Juno","Cleo","Bo","Wren","Otis","Pia","Ken","Suki","Yuki","Marc","Tia","Ozzy","Q","Rio","Vee","Nix","Lux","Ivy"];
+function spawnBotOnce(){
+  const id="bot_"+((Math.random()*1e6)|0);
+  const name=botNames[(Math.random()*botNames.length)|0]+((Math.random()*90)|0);
+  handleEvent("chat",{id,name,avatar:botAvatar(id,name)},{comment:"join"});
+}
+function botTraffic(){
+  const ids=[...players.keys()].filter(k=>k.startsWith("bot_"));
+  if(ids.length<CONFIG.minPlayers+2 && Math.random()<0.7) spawnBotOnce();
+  else if(Math.random()<0.15) spawnBotOnce();
+  if(phase==="battle" && ids.length){
+    const id=ids[(Math.random()*ids.length)|0];
+    const p=players.get(id); if(!p) return;
+    const r=Math.random();
+    if(r<0.55) handleEvent("like",{id,name:p.name,avatar:p.avatar},{likeCount:(Math.random()*15|0)+1});
+    else if(r<0.75) handleEvent("share",{id,name:p.name,avatar:p.avatar},{});
+    else { const dia=[1,5,5,10,10,50,100,299][(Math.random()*8)|0]; handleEvent("gift",{id,name:p.name,avatar:p.avatar},{giftName:"Gift",diamonds:dia,repeat:(Math.random()*3|0)+1}); }
+  }
+}
+function startSim(){
+  simOn=true;
+  for(let i=0;i<CONFIG.minPlayers+3;i++) spawnBotOnce();
+  simTimers.push(setInterval(botTraffic, 700));
+}
+function stopSim(){ simOn=false; simTimers.forEach(clearInterval); simTimers=[]; }
+
+/* ============================ HOST CONTROLS ============================ */
+const $=id=>document.getElementById(id);
+$("connectBtn").onclick=()=>{
+  if($("connectBtn").dataset.on==="1"){
+    wantUser=""; try{ ws&&ws.send(JSON.stringify({cmd:"disconnect"})); }catch(_){}
+    $("connectBtn").textContent="Connect"; $("connectBtn").dataset.on="";
+    setStatus("idle","Disconnected."); return;
+  }
+  const u=$("userInput").value.trim().replace(/^@/,"");
+  if(!u){ setStatus("error","Type the host’s @username first."); return; }
+  wantUser=u; $("connectBtn").textContent="Disconnect"; $("connectBtn").dataset.on="1";
+  if(!ws || ws.readyState>1) connectBridge();
+  else ws.send(JSON.stringify({cmd:"connect",username:u}));
+};
+$("startBtn").onclick=()=>{ if(phase==="lobby" && players.size>=1) startBattle(); else if(phase==="winner") startLobby(); };
+$("skipBtn").onclick=()=>{ if(phase==="battle"){ // force end
+    if(aliveSnakes().length){ let b=aliveSnakes()[0]; for(const s of aliveSnakes()) if(s.score>b.score)b=s; while(aliveSnakes().length>1){ for(const s of aliveSnakes()) if(s!==b) killSnake(s); } }
+    endBattle();
+  } else if(phase==="lobby"){ if(players.size>=1) startBattle(); }
+  else if(phase==="winner"){ startLobby(); }
+};
+$("simChk").onchange=e=>{ if(e.target.checked) startSim(); else stopSim(); };
+$("soundBtn").onclick=e=>{ soundOn=!soundOn; e.target.textContent=soundOn?"🔊":"🔇"; if(soundOn) beep(440,.08,"sine",.03); };
+$("hideBtn").onclick=()=>toggleControls(false);
+$("showBar").onclick=()=>toggleControls(true);
+function toggleControls(show){ $("controls").classList.toggle("hidden",!show); $("showBar").classList.toggle("show",!show); }
+document.addEventListener("keydown",e=>{ if(e.key==="h"||e.key==="H"){ const hidden=$("controls").classList.contains("hidden"); toggleControls(hidden); } });
+
+/* settings modal */
+function openSettings(){
+  $("setWs").value=CONFIG.wsUrl; $("setLobby").value=CONFIG.lobbySeconds; $("setWinner").value=CONFIG.winnerSeconds;
+  $("setMin").value=CONFIG.minPlayers; $("setMax").value=CONFIG.maxPlayers; $("setTick").value=CONFIG.tickMs;
+  $("setLikeGrow").value=CONFIG.likesPerGrow; $("setShieldD").value=CONFIG.shieldDiamonds; $("setRampD").value=CONFIG.rampageDiamonds;
+  $("setWords").value=CONFIG.joinWords.join(", "); $("setAuto").checked=CONFIG.autoJoin;
+  $("settings").classList.add("open");
+}
+$("gearBtn").onclick=openSettings;
+$("setCancel").onclick=()=>$("settings").classList.remove("open");
+$("setSave").onclick=()=>{
+  const num=(id,d)=>{ const v=parseFloat($(id).value); return isFinite(v)?v:d; };
+  const newWs=$("setWs").value.trim()||CONFIG.wsUrl;
+  const wsChanged=newWs!==CONFIG.wsUrl;
+  CONFIG.wsUrl=newWs;
+  CONFIG.lobbySeconds=num("setLobby",CONFIG.lobbySeconds);
+  CONFIG.winnerSeconds=num("setWinner",CONFIG.winnerSeconds);
+  CONFIG.minPlayers=num("setMin",CONFIG.minPlayers);
+  CONFIG.maxPlayers=num("setMax",CONFIG.maxPlayers);
+  CONFIG.tickMs=num("setTick",CONFIG.tickMs);
+  CONFIG.likesPerGrow=num("setLikeGrow",CONFIG.likesPerGrow);
+  CONFIG.shieldDiamonds=num("setShieldD",CONFIG.shieldDiamonds);
+  CONFIG.rampageDiamonds=num("setRampD",CONFIG.rampageDiamonds);
+  CONFIG.joinWords=$("setWords").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+  CONFIG.autoJoin=$("setAuto").checked;
+  $("settings").classList.remove("open");
+  if(wsChanged && (wantUser)) connectBridge();
+  if(phase==="lobby") renderOverlay();
+};
+
+/* ============================ BOOT ============================ */
+function boot(){
+  resize();
+  if(params.get("hud")==="min") toggleControls(false);
+  const u=params.get("user"); if(u){ $("userInput").value=u.replace(/^@/,""); }
+  startLobby();
+  requestAnimationFrame(loop);
+  if(params.get("sim")==="1"){ $("simChk").checked=true; startSim(); }
+  if(params.get("connect")==="1" && u){ wantUser=u.replace(/^@/,""); $("connectBtn").textContent="Disconnect"; $("connectBtn").dataset.on="1"; connectBridge(); }
+  if(CONFIG.sbUrl && CONFIG.sbAnon){ connectSupabase(); }
+  else setStatus("idle","Enter the live host’s @username, or flip on Test bots.");
+}
+boot();
+
+})();
+</script>
+</body>
+</html>
