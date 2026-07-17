@@ -98,7 +98,8 @@
   .feedItem{background:rgba(9,9,30,.72); border:1px solid #26264f; border-left:3px solid var(--cyan);
     border-radius:8px; padding:6px 10px; font-size:12.5px; color:var(--ink);
     display:flex; align-items:center; gap:8px; backdrop-filter:blur(6px);
-    animation:slideIn .25s ease}
+    animation:slideIn .25s ease; transition:opacity .45s ease, transform .45s ease}
+  .feedItem.out{opacity:0; transform:translateX(-12px)}
   .feedItem img{width:20px;height:20px;border-radius:50%;object-fit:cover;flex:none}
   .feedItem.gift{border-left-color:var(--gold)}
   .feedItem.like{border-left-color:var(--magenta)}
@@ -413,6 +414,7 @@ function spawnFood(){
 function ensurePlayer(user){
   let p=players.get(user.id);
   if(!p){
+    if(players.size>=CONFIG.maxPlayers) return null;   // lobby is full — turn away new players
     p={ id:user.id, name:user.name||"Someone", avatar:user.avatar||"", color:colorFor(user.id), likeAccum:0 };
     players.set(user.id,p);
     addFeed("join", p, p.name+" joined!");
@@ -854,6 +856,8 @@ function addFeed(kind,p,text){
   div.innerHTML=av+`<span>${escapeHtml(text)}</span>`;
   feedEl.appendChild(div);
   while(feedEl.children.length>7) feedEl.removeChild(feedEl.firstChild);
+  // fade out 3s after the event, then remove
+  setTimeout(()=>{ div.classList.add("out"); setTimeout(()=>{ if(div.parentNode) div.parentNode.removeChild(div); }, 500); }, 3000);
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
