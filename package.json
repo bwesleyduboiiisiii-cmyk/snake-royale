@@ -1,0 +1,14 @@
+{
+  "name": "snake-royale-bridge",
+  "version": "1.0.0",
+  "description": "TikTok LIVE -> WebSocket bridge for the Snake Royale live game",
+  "main": "bridge.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "tiktok-live-connector": "2.4.2",
+    "ws": "8.21.1"
+  }
+}
