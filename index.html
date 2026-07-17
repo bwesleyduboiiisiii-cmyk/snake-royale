@@ -255,7 +255,7 @@ const CONFIG = {
   stormStartSec:15,
   stormFullSec:95,
   hardCapSec:135,
-  joinWords:["join","play","snake","in"],
+  joinWords:["join","play","snake"],
   autoJoin:true,
   wsUrl: params.get("ws") || "ws://localhost:8081",
   // Supabase (cloud mode). Fill SB_URL/SB_ANON below, or pass ?sb=...&key=... in the URL.
@@ -401,8 +401,9 @@ function ensurePlayer(user){
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
 function isJoinWord(txt){
-  const t=(txt||"").toLowerCase().trim();
-  return CONFIG.joinWords.some(w=> t===w || t.split(/\s+/).includes(w));
+  // Forgiving match: any chat that contains a join keyword counts.
+  const t=(txt||"").toLowerCase().replace(/[^a-z0-9\s]/g," ");
+  return CONFIG.joinWords.some(w=> t.includes(w));
 }
 
 function handleEvent(kind,user,payload){
