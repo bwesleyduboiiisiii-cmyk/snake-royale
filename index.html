@@ -106,6 +106,7 @@
   .feedItem.like{border-left-color:var(--magenta)}
   .feedItem.share{border-left-color:var(--cyan)}
   .feedItem.join{border-left-color:var(--lime)}
+  .feedItem.kill{border-left-color:#ff3b6b}
 
   /* ---------- Legend ---------- */
   #legend{position:fixed; right:16px; bottom:16px; z-index:20; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; pointer-events:none; max-width:46vw}
@@ -373,7 +374,7 @@ function updateBird(dtMs){
       if(now>=birdWarnUntil){ birdWarnUntil=0; spawnBird(); }
     } else if(now>=nextBirdAt && aliveSnakes().length>0){
       birdWarnUntil = now + BIRD_WARN_MS;   // flash the warning first
-      ping("gift");
+      ping("bird");
     }
     return;
   }
@@ -429,6 +430,33 @@ function drawBirdWarning(){
   ctx.font="700 "+Math.round(H*0.032)+"px 'Chakra Petch', system-ui, sans-serif";
   ctx.fillStyle="#ffe9a8";
   ctx.fillText("DODGE THE EAGLE", 0, H*0.085);
+  ctx.restore();
+}
+function drawKillBanner(){
+  const b = IS_CONTROL ? mKillBanner : killBanner;
+  if(!b || now>=b.until) return;
+  const life=(b.until-now)/1900; const t=now/1000; const pulse=0.5+0.5*Math.sin(t*18);
+  ctx.save(); ctx.translate(W/2, H*0.42);
+  const s=1+0.12*pulse+(1-life)*0.1; ctx.scale(s,s);
+  ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.globalAlpha=Math.min(1,life*3);
+  ctx.font="900 "+Math.round(H*0.085)+"px Bungee, system-ui, sans-serif";
+  ctx.lineWidth=Math.max(4,H*0.012); ctx.strokeStyle="rgba(0,0,0,.9)";
+  ctx.shadowColor="rgba(255,60,90,.95)"; ctx.shadowBlur=25+45*pulse; ctx.fillStyle="#ff3b6b";
+  ctx.strokeText(b.label,0,0); ctx.fillText(b.label,0,0); ctx.shadowBlur=0;
+  ctx.font="700 "+Math.round(H*0.03)+"px 'Chakra Petch', system-ui, sans-serif";
+  ctx.fillStyle="#ffd0dc"; ctx.fillText((b.name||"").toUpperCase(),0,H*0.07);
+  ctx.restore();
+}
+function drawSlowmo(){
+  const on = IS_CONTROL ? mSlowmo : finishing;
+  if(!on) return;
+  const t=now/1000; const pulse=0.5+0.5*Math.sin(t*6);
+  ctx.save();
+  ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H*0.10); ctx.fillRect(0,H*0.90,W,H*0.10);
+  ctx.translate(W/2,H*0.5); ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.font="900 "+Math.round(H*0.05)+"px Bungee, system-ui, sans-serif";
+  ctx.globalAlpha=0.5+0.4*pulse; ctx.shadowColor="rgba(255,210,60,.9)"; ctx.shadowBlur=30;
+  ctx.fillStyle="#ffd23f"; ctx.fillText("FINAL BLOW",0,0);
   ctx.restore();
 }
 function drawBird(){
@@ -513,6 +541,14 @@ function beep(freq,dur,type,vol){
 function ping(kind){
   if(kind==="join") beep(660,.12,"sine",.04);
   else if(kind==="big") beep(180,.25,"sawtooth",.06);
+  else if(kind==="kill") beep(300,.10,"square",.05);
+  else if(kind==="double"){ beep(400,.10,"square",.05); setTimeout(()=>beep(520,.12,"square",.05),90); }
+  else if(kind==="triple"){ beep(440,.10,"square",.05); setTimeout(()=>beep(560,.10,"square",.05),90); setTimeout(()=>beep(700,.16,"square",.06),180); }
+  else if(kind==="mega"){ beep(200,.3,"sawtooth",.07); setTimeout(()=>beep(120,.4,"sawtooth",.07),120); }
+  else if(kind==="meteor"){ beep(90,.5,"sawtooth",.07); }
+  else if(kind==="bolt"){ beep(1200,.08,"square",.05); setTimeout(()=>beep(700,.12,"square",.04),60); }
+  else if(kind==="bird"){ beep(900,.12,"triangle",.05); setTimeout(()=>beep(1100,.10,"triangle",.04),80); }
+  else if(kind==="golden"){ beep(784,.10,"sine",.05); setTimeout(()=>beep(1047,.16,"sine",.05),100); }
   else if(kind==="win"){ beep(523,.15,"square",.05); setTimeout(()=>beep(659,.15,"square",.05),140); setTimeout(()=>beep(784,.3,"square",.05),300); }
 }
 
@@ -647,7 +683,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -739,9 +775,23 @@ function chooseDir(s,occ){
   }
   return best;
 }
-function killSnake(s,cause){
+function killSnake(s,cause,killer){
   if(!s.alive) return;
   s.alive=false; s.deadAt=now;
+  if(killer && killer.alive && killer.id!==s.id) creditKill(killer,s);
+}
+function creditKill(k,victim){
+  k.kills=(k.kills||0)+1;
+  if(now-(k.lastKillAt||0) < 3800) k.killStreak=(k.killStreak||0)+1; else k.killStreak=1;
+  k.lastKillAt=now;
+  addFeed("kill", players.get(k.id)||{name:k.name,avatar:k.avatar}, "⚔️ "+k.name+" eliminated "+victim.name);
+  ping("kill");
+  if(k.killStreak>=2) showKillBanner(k.killStreak, k.name);
+}
+function showKillBanner(n,name){
+  const label = n===2?"DOUBLE KILL!" : n===3?"TRIPLE KILL!" : n===4?"MONSTER KILL!" : "M A S S A C R E !";
+  killBanner={ label, name, until:now+1900 };
+  ping(n>=4?"mega":n===3?"triple":"double");
 }
 function stepSnake(s,occ){
   const d=chooseDir(s,occ); s.dir=d;
@@ -753,10 +803,10 @@ function stepSnake(s,occ){
   if(occId && occId!==s.id){
     if(rampage){
       const victim=snakes.find(z=>z.id===occId && z.alive);
-      if(victim){ killSnake(victim,"rampage"); s.score+=5; addFeed("gift",players.get(s.id),s.name+" devoured "+victim.name+"! 🔥"); }
+      if(victim){ killSnake(victim,"rampage",s); s.score+=5; }
       // remove victim cells from occ so we can pass
       if(victim){ for(const c of victim.cells) occ.delete(c.x+","+c.y); }
-    } else if(!shielded){ killSnake(s,"crash"); return; }
+    } else if(!shielded){ const killer=snakes.find(z=>z.id===occId && z.alive); killSnake(s,"crash",killer); return; }
   } else if(occId===s.id && !shielded){ killSnake(s,"self"); return; }
   // advance
   s.cells.unshift({x:nx,y:ny}); s.head=s.cells[0];
@@ -785,7 +835,10 @@ function tick(){
   // remove long-dead snakes
   snakes = snakes.filter(s=>s.alive || (now-s.deadAt)<650);
   const alive=aliveSnakes();
-  if(alive.length<=1 || battleElapsed()>CONFIG.hardCapSec) endBattle();
+  if(!finishing && (alive.length<=1 || battleElapsed()>CONFIG.hardCapSec)){
+    finishing=true; slowmoUntil=now+1200;
+  }
+  if(finishing && now>=slowmoUntil){ finishing=false; slowmoUntil=0; endBattle(); }
 }
 
 /* ============================ PHASE MACHINE ============================ */
@@ -804,6 +857,7 @@ function startBattle(){
   phase="battle"; battleStart=now; lastTick=now;
   bird.active=false; bird.carrying=null; nextBirdAt = now + BIRD_EVERY;
   meteor.phase="idle"; bolts=[]; golden=null;
+  killBanner=null; finishing=false; slowmoUntil=0;
   nextMeteorAt = now + METEOR_EVERY*0.6; nextBoltAt = now + BOLT_EVERY*0.8; nextGoldenAt = now + GOLDEN_EVERY*0.4;
   updateStorm();
   snakes = roster.map(p=>newSnake(p));
@@ -822,6 +876,10 @@ function endBattle(){
     winner=best;
   }
   phase="winner";
+  // MVP = most kills this round (falls back to the winner)
+  mvp=null; let mk=-1;
+  for(const s of roundRoster){ if((s.kills||0)>mk){ mk=s.kills||0; mvp=s; } }
+  if(mk<=0) mvp=winner;
   winnerEndsAt = now + CONFIG.winnerSeconds*1000;
   if(IS_ENGINE) recordWin(winner);
   spawnConfetti();
@@ -1006,6 +1064,7 @@ function renderOverlay(){
       <div class="winName">${escapeHtml(winner.name)}</div>
       <div class="headline" style="font-size:clamp(28px,5vw,64px);margin-top:6px">WINNER 👑</div>
       <div class="winStats">Length ${winner.cells.length} · Score ${winner.score} · beat ${Math.max(0,roundRoster.length-1)} challengers</div>
+      ${mvp ? `<div class="winStats" style="color:#ffd23f">🏅 MVP: ${escapeHtml(mvp.name)} — ${mvp.kills||0} kill${(mvp.kills||0)===1?"":"s"}</div>` : ""}
       <div class="sub" id="nextIn">Next game starting…</div>
     </div>`;
   } else {
@@ -1068,7 +1127,8 @@ function loop(){
         else lobbyEndsAt=now+8000; // extend, wait for players
       }
     } else if(phase==="battle"){
-      while(now-lastTick>=CONFIG.tickMs){ lastTick+=CONFIG.tickMs; tick(); if(phase!=="battle") break; }
+      const iv = finishing ? CONFIG.tickMs*4 : CONFIG.tickMs;
+      while(now-lastTick>=iv){ lastTick+=iv; tick(); if(phase!=="battle") break; }
     } else if(phase==="winner"){
       if(now>=winnerEndsAt) startLobby();
     }
@@ -1093,6 +1153,8 @@ function loop(){
   if(phase==="battle") drawHazards();
   if(phase==="battle") drawBird();
   if(phase==="battle") drawBirdWarning();
+  if(phase==="battle") drawSlowmo();
+  if(phase==="battle") drawKillBanner();
   if(phase==="winner") drawConfetti();
 
   updateOverlayLive();
@@ -1179,6 +1241,10 @@ let nextBoltAt = 0; const BOLT_EVERY = 23000, BOLT_WARN = 1300, BOLT_STRIKE = 50
 let golden = null;            // {x,y,until}
 let nextGoldenAt = 0; const GOLDEN_EVERY = 26000, GOLDEN_LIFE = 12000, GOLDEN_GROW = 8;
 let mMeteor=null, mBolts=[], mGolden=null; // mirror copies
+let killBanner=null;     // {label, name, until}
+let mvp=null;            // set at end of battle
+let finishing=false, slowmoUntil=0;   // dramatic slow-mo before declaring winner
+let mKillBanner=null, mSlowmo=false;  // mirror copies
 
 /* ============================ SEASON LEADERBOARD ============================ */
 let leaderboard = [];   // [{name, avatar, wins}]
@@ -1213,7 +1279,7 @@ function updateHazards(){
   if(meteor.phase==="idle" && now>=nextMeteorAt && aliveSnakes().length>0){
     const t=aliveSnakes()[(Math.random()*aliveSnakes().length)|0];
     meteor.x=t.head.x; meteor.y=t.head.y; meteor.r=METEOR_R;
-    meteor.phase="warn"; meteor.warnUntil=now+METEOR_WARN; ping("gift");
+    meteor.phase="warn"; meteor.warnUntil=now+METEOR_WARN; ping("meteor");
   } else if(meteor.phase==="warn" && now>=meteor.warnUntil){
     meteor.phase="impact"; meteor.hitAt=now;
     for(const s of aliveSnakes()){
@@ -1236,7 +1302,7 @@ function updateHazards(){
       }
       bolts.push({cells, warnUntil:now+BOLT_WARN, strikeUntil:now+BOLT_WARN+BOLT_STRIKE, struck:false});
     }
-    ping("share");
+    ping("bolt");
   }
   for(const b of bolts){
     if(!b.struck && now>=b.warnUntil){
@@ -1269,7 +1335,7 @@ function tryGolden(s,nx,ny){
     golden=null; nextGoldenAt=now+GOLDEN_EVERY;
     s.pendingGrow+=GOLDEN_GROW; s.score+=5;
     addFeed("gift", players.get(s.id)||{name:s.name,avatar:s.avatar}, "🍎 "+s.name+" grabbed the GOLDEN APPLE! +"+GOLDEN_GROW);
-    ping("gift"); return true;
+    ping("golden"); return true;
   }
   return false;
 }
@@ -1338,6 +1404,9 @@ function buildSnapshot(){
     meteor: (meteor.phase&&meteor.phase!=="idle") ? { phase:meteor.phase, x:meteor.x, y:meteor.y, r:meteor.r, warnUntil:meteor.warnUntil, hitAt:meteor.hitAt } : null,
     bolts: bolts.map(b=>({ cells:b.cells, warnUntil:b.warnUntil, strikeUntil:b.strikeUntil })),
     golden: golden ? { x:golden.x, y:golden.y } : null,
+    mvp: mvp ? { name:mvp.name, kills:mvp.kills||0 } : null,
+    killBanner: (killBanner && now<killBanner.until) ? { label:killBanner.label, name:killBanner.name, until:killBanner.until } : null,
+    slowmo: finishing ? 1 : 0,
     lb: leaderboard,
   };
 }
@@ -1356,6 +1425,9 @@ function applySnapshot(snap){
   mMeteor = snap.meteor || null;
   mBolts = snap.bolts || [];
   mGolden = snap.golden || null;
+  mvp = snap.mvp ? { name:snap.mvp.name, kills:snap.mvp.kills } : mvp;
+  mKillBanner = snap.killBanner || null;
+  mSlowmo = !!snap.slowmo;
   if(snap.lb){ leaderboard=snap.lb; renderLeaderboard(); }
   safe = snap.safe || safe;
   roundRoster = new Array(snap.total||0);
