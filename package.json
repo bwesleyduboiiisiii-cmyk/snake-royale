@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Snake Royale for TikTok LIVE — static overlay + Vercel ingest function + Supabase Realtime.",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^17.4.2",
+    "tiktok-live-connector": "^2.4.2"
   }
 }
