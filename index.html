@@ -393,7 +393,7 @@ function updateBird(dtMs){
       const i=snakes.indexOf(tgt); if(i>=0) snakes.splice(i,1);
       addFeed("gift", players.get(tgt.id)||{name:tgt.name,avatar:tgt.avatar}, "🦅 "+tgt.name+" got snatched!");
       ping("gift");
-      if(aliveSnakes().length<=1) endBattle();
+      if(aliveSnakes().length<=1 && !finishing){ finishing=true; slowmoUntil=now+5000; }
     }
   }
   if(bird.carrying){ bird.cy += Math.sign((CONFIG.ROWS*0.15) - bird.cy) * bird.spd*dt*0.4; } // rise while carrying
@@ -836,7 +836,7 @@ function tick(){
   snakes = snakes.filter(s=>s.alive || (now-s.deadAt)<650);
   const alive=aliveSnakes();
   if(!finishing && (alive.length<=1 || battleElapsed()>CONFIG.hardCapSec)){
-    finishing=true; slowmoUntil=now+1200;
+    finishing=true; slowmoUntil=now+5000;
   }
   if(finishing && now>=slowmoUntil){ finishing=false; slowmoUntil=0; endBattle(); }
 }
@@ -1287,7 +1287,7 @@ function updateHazards(){
       if(s.cells.some(c=>inRadius(c.x,c.y,meteor.x,meteor.y,meteor.r))) killSnake(s,"meteor");
     }
     addFeed("gift",{name:"☄️ Meteor"},"☄️ Meteor strike!");
-    if(aliveSnakes().length<=1) endBattle();
+    if(aliveSnakes().length<=1 && !finishing){ finishing=true; slowmoUntil=now+5000; }
   } else if(meteor.phase==="impact" && now-meteor.hitAt>500){
     meteor.phase="idle"; nextMeteorAt=now+METEOR_EVERY;
   }
@@ -1317,7 +1317,7 @@ function updateHazards(){
   if(bolts.length && bolts.every(b=>now>=b.strikeUntil)){
     if(bolts.some(b=>b.struck)) addFeed("share",{name:"⚡ Storm"},"⚡ Lightning struck!");
     bolts=[]; nextBoltAt=now+BOLT_EVERY;
-    if(aliveSnakes().length<=1) endBattle();
+    if(aliveSnakes().length<=1 && !finishing){ finishing=true; slowmoUntil=now+5000; }
   }
   // ---- GOLDEN APPLE ----
   if(!golden && now>=nextGoldenAt){
