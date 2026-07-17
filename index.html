@@ -574,6 +574,7 @@ function tick(){
 /* ============================ PHASE MACHINE ============================ */
 function startLobby(){
   phase="lobby";
+  lastRosterCount=-1;
   lobbyEndsAt = now + CONFIG.lobbySeconds*1000;
   snakes=[]; foods=[]; confetti=[]; winner=null;
   renderOverlay();
@@ -743,6 +744,7 @@ function roundRect(x,y,w,h,r){
 
 /* ============================ DOM OVERLAYS ============================ */
 const overlay=document.getElementById("overlay");
+let lastRosterCount=-1;
 function playerChip(p){
   const av = p.avatar
     ? `<div class="av"><img src="${escapeHtml(p.avatar)}" alt=""></div>`
@@ -799,6 +801,15 @@ function updateOverlayLive(){
     if(arc){
       const frac=clamp((lobbyEndsAt-now)/(CONFIG.lobbySeconds*1000),0,1);
       arc.style.strokeDashoffset=(326.7*(1-frac)).toFixed(1);
+    }
+    // keep the roster card in sync as players join during the lobby
+    if(players.size!==lastRosterCount){
+      lastRosterCount=players.size;
+      const listEl=document.querySelector(".lobbyList");
+      if(listEl){
+        const list=[...players.values()].slice(0,40).map(playerChip).join("");
+        listEl.innerHTML = list || `<span class="sub">No players yet — be the first!</span>`;
+      }
     }
   } else if(phase==="winner"){
     const el=document.getElementById("nextIn");
@@ -896,7 +907,8 @@ function connectSupabase(){
     sbChan = sb.channel("snake-events")
       .on("postgres_changes", { event:"INSERT", schema:"public", table:"events" }, (msg)=>{
         const r = msg.new || {};
-        const user = { id:r.user_id||("u_"+Math.random().toString(36).slice(2)), name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(r.user_id||"x", r.user_name||"viewer") };
+        const stableId = r.user_id || ("name_" + String(r.user_name||"anon").toLowerCase().replace(/\s+/g,"_"));
+        const user = { id:stableId, name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(stableId, r.user_name||"viewer") };
         const payload = (r.payload && typeof r.payload==="object") ? r.payload : {};
         if(r.kind) handleEvent(r.kind, user, payload);
       })
