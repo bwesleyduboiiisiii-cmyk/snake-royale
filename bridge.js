@@ -41,7 +41,14 @@ async function post(kind, user, payload) {
       body: JSON.stringify({ kind, user, payload, secret: SECRET }),
     });
     const data = await res.json().catch(() => ({}));
-    console.log(`-> ${kind.padEnd(6)} ${user.name || "?"}`, res.status, data.error || "ok");
+    // Show the actual chat text (and whether it counts as a join) so you can see what viewers type.
+    let extra = "";
+    if (kind === "chat" && payload && payload.comment) {
+      const t = String(payload.comment).toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+      const isJoin = ["join", "play", "snake"].some(w => t.includes(w));
+      extra = `  "${payload.comment}"` + (isJoin ? "  [JOIN ✓]" : "  [not a join]");
+    }
+    console.log(`-> ${kind.padEnd(6)} ${user.name || "?"}`, res.status, data.error || "ok", extra);
   } catch (e) {
     console.error("post failed:", e.message);
   }
