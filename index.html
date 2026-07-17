@@ -320,6 +320,7 @@ function colorFor(id){
   return { hue, body:`hsl(${hue} 85% 60%)`, dim:`hsl(${hue} 70% 45%)`, glow:`hsl(${hue} 95% 65%)` };
 }
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
+function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
 
 /* avatar image cache (display only; never read back so cross-origin is fine) */
 const imgCache=new Map();
@@ -949,8 +950,9 @@ function connectSupabase(){
       sbChan = sb.channel("snake-events")
         .on("postgres_changes", { event:"INSERT", schema:"public", table:"events" }, (msg)=>{
           const r = msg.new || {};
-          const stableId = r.user_id || ("name_" + String(r.user_name||"anon").toLowerCase().replace(/\s+/g,"_"));
-          const user = { id:stableId, name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(stableId, r.user_name||"viewer") };
+          const rawName = r.user_name || "anon";
+          const stableId = r.user_id ? String(r.user_id) : ("nm_" + hashStr(rawName));
+          const user = { id:stableId, name:rawName, avatar:r.user_avatar||botAvatar(stableId, rawName) };
           const payload = (r.payload && typeof r.payload==="object") ? r.payload : {};
           if(r.kind) handleEvent(r.kind, user, payload);
         })

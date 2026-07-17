@@ -58,8 +58,10 @@ function mkUser(d) {
   const u = (d && d.user) || d || {};
   const pic = u.profilePicture;
   const avatar = (pic && (pic.url || (Array.isArray(pic.urls) && pic.urls[0]) || (Array.isArray(pic) && pic[0]))) || u.avatarThumb || "";
+  // TikTok exposes the id under several names; uniqueId (@handle) is a reliable stable fallback.
+  const rawId = u.userId || u.uniqueId || u.secUid || u.id || (d && d.userId) || "";
   return {
-    id:     u.userId || u.uniqueId || "",
+    id:     rawId ? String(rawId) : "",
     name:   u.nickname || u.uniqueId || "viewer",
     avatar: typeof avatar === "string" ? avatar : "",
   };
