@@ -256,7 +256,7 @@ const CONFIG = {
   stormFullSec:95,
   hardCapSec:135,
   joinWords:["join","play","snake"],
-  autoJoin:true,
+  autoJoin:false,
   wsUrl: params.get("ws") || "ws://localhost:8081",
   // Supabase (cloud mode). Fill SB_URL/SB_ANON below, or pass ?sb=...&key=... in the URL.
   sbUrl: params.get("sb") || (window.SB_URL || ""),
@@ -408,10 +408,12 @@ function isJoinWord(txt){
 
 function handleEvent(kind,user,payload){
   payload=payload||{};
-  // registration rules
-  if(kind==="gift"||kind==="share"||kind==="follow"||kind==="join") ensurePlayer(user);
-  else if(kind==="chat"){ if(isJoinWord(payload.comment)) ensurePlayer(user); }
-  else if(kind==="like"){ if(CONFIG.autoJoin) ensurePlayer(user); }
+  // registration rules — viewers OPT IN by typing a join word in chat.
+  // Gifting/sharing also drops you in (clear intent). Room-entry ("join" kind =
+  // someone entering the live) and likes do NOT auto-add unless autoJoin is on.
+  if(kind==="chat"){ if(isJoinWord(payload.comment)) ensurePlayer(user); }
+  else if(kind==="gift"||kind==="share") ensurePlayer(user);
+  else if(kind==="join"||kind==="follow"||kind==="like"){ if(CONFIG.autoJoin) ensurePlayer(user); }
 
   const p=players.get(user.id);
   if(!p) return;
