@@ -193,8 +193,8 @@
   <div id="feed"></div>
   <div id="legend">
     <span class="leg like">❤ <b>Like</b> = boost</span>
-    <span class="leg share">↗ <b>Share</b> = shield</span>
-    <span class="leg gift">💎 <b>Gift</b> = grow / rampage</span>
+    <span class="leg share">🌹 <b>Rose</b> = shield</span>
+    <span class="leg gift">🫰 <b>Finger Heart</b> = rampage</span>
   </div>
 
   <!-- Big overlays -->
@@ -213,8 +213,8 @@
     <span class="sep"></span>
     <span class="fxlabel">Test FX:</span>
     <button class="btn fx" id="fxBoost" title="apply a boost to a player">⚡ Boost</button>
-    <button class="btn fx" id="fxShield" title="apply a shield to a player">🛡 Shield</button>
-    <button class="btn fx" id="fxRampage" title="trigger rampage on a player">🔥 Rampage</button>
+    <button class="btn fx" id="fxShield" title="give a player a shield (Rose)">🌹 Shield</button>
+    <button class="btn fx" id="fxRampage" title="trigger rampage on a player (Finger Heart)">🫰 Rampage</button>
     <span class="sep"></span>
     <label class="toggle" style="gap:4px">Difficulty
       <select id="diffSel" class="miniSel">
@@ -603,13 +603,16 @@ function handleEvent(kind,user,payload){
       if(s){ s.shieldUntil=now+CONFIG.shieldMs; addFeed("share",p,p.name+" is shielded"); }
     } else if(kind==="gift"){
       const val=(payload.diamonds||0)*(payload.repeat||1);
+      const gname=String(payload.giftName||"").toLowerCase();
+      const isFingerHeart = gname.includes("finger heart")||gname.includes("fingerheart")||gname.includes("finger");
+      const isRose = gname.includes("rose");
       if(s){
         s.score+=Math.max(1,Math.round(val));
-        if(val>=CONFIG.rampageDiamonds){
+        if(isFingerHeart || val>=CONFIG.rampageDiamonds){
           s.rampageUntil=now+CONFIG.rampageMs; s.shieldUntil=Math.max(s.shieldUntil, now+1600);
-          addFeed("gift",p,"🔥 "+p.name+" RAMPAGE! ("+(payload.giftName||"gift")+")"); ping("big");
-        } else if(val>=CONFIG.shieldDiamonds){
-          s.shieldUntil=now+CONFIG.shieldMs; addFeed("gift",p,"💎 "+p.name+" → shield");
+          addFeed("gift",p,"🔥 "+p.name+" RAMPAGE! (🫰 "+(payload.giftName||"Finger Heart")+")"); ping("big");
+        } else if(isRose || val>=CONFIG.shieldDiamonds){
+          s.shieldUntil=now+CONFIG.shieldMs; addFeed("gift",p,"🌹 "+p.name+" is shielded");
         } else {
           s.boostSteps=Math.min(6,s.boostSteps+2); s.pendingGrow+=2; addFeed("gift",p,"💎 "+p.name+" → grow");
         }
@@ -968,8 +971,8 @@ function renderOverlay(){
       <div class="actions">
         <span class="chip j">JOIN = play</span>
         <span class="chip l">❤ LIKE = boost</span>
-        <span class="chip s">↗ SHARE = shield</span>
-        <span class="chip g">💎 GIFT = rampage</span>
+        <span class="chip s">🌹 ROSE = shield</span>
+        <span class="chip g">🫰 FINGER HEART = rampage</span>
       </div>
       <div id="ring">
         <svg width="120" height="120"><circle cx="60" cy="60" r="52" stroke="#26264f" stroke-width="8" fill="none"/>
@@ -1349,8 +1352,8 @@ function fireTestFX(effect, id){
   const p=players.get(targetId); if(!p) return;
   const u={id:p.id,name:p.name,avatar:p.avatar};
   if(effect==="boost") handleEvent("like",u,{likeCount:20});
-  else if(effect==="shield") handleEvent("share",u,{});
-  else if(effect==="rampage") handleEvent("gift",u,{giftName:"Test",diamonds:100,repeat:1});
+  else if(effect==="shield") handleEvent("gift",u,{giftName:"Rose",diamonds:1,repeat:1});
+  else if(effect==="rampage") handleEvent("gift",u,{giftName:"Finger Heart",diamonds:5,repeat:1});
 }
 function connectRoom(){
   if(!sb) return;
