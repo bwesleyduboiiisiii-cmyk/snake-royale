@@ -746,6 +746,7 @@ function stepSnake(s,occ){
   // advance
   s.cells.unshift({x:nx,y:ny}); s.head=s.cells[0];
   occ.set(nx+","+ny,s.id);
+  tryGolden(s,nx,ny);
   // food
   const fi=foods.findIndex(f=>f.x===nx&&f.y===ny);
   if(fi>=0){ foods.splice(fi,1); s.score+=1; s.pendingGrow++; spawnFood(); }
@@ -787,6 +788,8 @@ function startBattle(){
   document.getElementById("roundNum").textContent=round;
   phase="battle"; battleStart=now; lastTick=now;
   bird.active=false; bird.carrying=null; nextBirdAt = now + BIRD_EVERY;
+  meteor.phase="idle"; bolts=[]; golden=null;
+  nextMeteorAt = now + METEOR_EVERY*0.6; nextBoltAt = now + BOLT_EVERY*0.8; nextGoldenAt = now + GOLDEN_EVERY*0.4;
   updateStorm();
   snakes = roster.map(p=>newSnake(p));
   roundRoster = snakes.slice();
@@ -1055,6 +1058,7 @@ function loop(){
   }
   updateConfetti(dt);
   if(!IS_CONTROL && phase==="battle") updateBird(dt);
+  if(!IS_CONTROL && phase==="battle") updateHazards();
 
   // HUD
   document.getElementById("phasePill").textContent = phase==="battle"?"BATTLE":phase.toUpperCase();
@@ -1069,6 +1073,7 @@ function loop(){
   drawStorm();
   if(phase==="battle") drawFood();
   for(const s of snakes) drawSnake(s);
+  if(phase==="battle") drawHazards();
   if(phase==="battle") drawBird();
   if(phase==="battle") drawBirdWarning();
   if(phase==="winner") drawConfetti();
@@ -1146,6 +1151,131 @@ function connectSupabase(){
 
 /* ============================ ROOM SYNC (engine <-> control) ============================ */
 let mirrorStorm=0, mirrorAlive=0, mirrorTotal=0, mirrorWarn=false;
+
+/* ============================ HAZARDS & LOOT ============================ */
+// All telegraphed & dodgeable like the eagle; all synced to the control-panel mirror.
+let meteor = { phase:"idle", x:0, y:0, r:3, warnUntil:0, hitAt:0 };   // idle|warn|impact
+let nextMeteorAt = 0; const METEOR_EVERY = 17000, METEOR_WARN = 1600, METEOR_R = 3;
+let bolts = [];               // lightning: [{cells:[[x,y]..], warnUntil, strikeUntil}]
+let nextBoltAt = 0; const BOLT_EVERY = 23000, BOLT_WARN = 1300, BOLT_STRIKE = 500, BOLT_COUNT = 3;
+let golden = null;            // {x,y,until}
+let nextGoldenAt = 0; const GOLDEN_EVERY = 26000, GOLDEN_LIFE = 12000, GOLDEN_GROW = 8;
+let mMeteor=null, mBolts=[], mGolden=null; // mirror copies
+
+function inRadius(x,y,cx,cy,r){ const dx=x-cx, dy=y-cy; return dx*dx+dy*dy <= r*r; }
+
+function updateHazards(){
+  if(phase!=="battle"){ meteor.phase="idle"; bolts=[]; golden=null; return; }
+  // ---- METEOR ----
+  if(meteor.phase==="idle" && now>=nextMeteorAt && aliveSnakes().length>0){
+    const t=aliveSnakes()[(Math.random()*aliveSnakes().length)|0];
+    meteor.x=t.head.x; meteor.y=t.head.y; meteor.r=METEOR_R;
+    meteor.phase="warn"; meteor.warnUntil=now+METEOR_WARN; ping("gift");
+  } else if(meteor.phase==="warn" && now>=meteor.warnUntil){
+    meteor.phase="impact"; meteor.hitAt=now;
+    for(const s of aliveSnakes()){
+      if(s.shieldUntil>now) continue;
+      if(s.cells.some(c=>inRadius(c.x,c.y,meteor.x,meteor.y,meteor.r))) killSnake(s,"meteor");
+    }
+    addFeed("gift",{name:"☄️ Meteor"},"☄️ Meteor strike!");
+    if(aliveSnakes().length<=1) endBattle();
+  } else if(meteor.phase==="impact" && now-meteor.hitAt>500){
+    meteor.phase="idle"; nextMeteorAt=now+METEOR_EVERY;
+  }
+  // ---- LIGHTNING ----
+  if(!bolts.length && now>=nextBoltAt && aliveSnakes().length>0){
+    for(let i=0;i<BOLT_COUNT;i++){
+      const vertical=Math.random()<0.5;
+      const cells=[];
+      if(vertical){ const cx=(Math.random()*CONFIG.COLS)|0; for(let y=0;y<CONFIG.ROWS;y++) cells.push([cx,y]); }
+      else { const cy=(Math.random()*CONFIG.ROWS)|0; for(let x=0;x<CONFIG.COLS;x++) cells.push([x,cy]); }
+      bolts.push({cells, warnUntil:now+BOLT_WARN, strikeUntil:now+BOLT_WARN+BOLT_STRIKE, struck:false});
+    }
+    ping("share");
+  }
+  for(const b of bolts){
+    if(!b.struck && now>=b.warnUntil){
+      b.struck=true;
+      const set=new Set(b.cells.map(c=>c[0]+","+c[1]));
+      for(const s of aliveSnakes()){
+        if(s.shieldUntil>now) continue;
+        if(s.cells.some(c=>set.has(c.x+","+c.y))) killSnake(s,"bolt");
+      }
+    }
+  }
+  if(bolts.length && bolts.every(b=>now>=b.strikeUntil)){
+    if(bolts.some(b=>b.struck)) addFeed("share",{name:"⚡ Storm"},"⚡ Lightning struck!");
+    bolts=[]; nextBoltAt=now+BOLT_EVERY;
+    if(aliveSnakes().length<=1) endBattle();
+  }
+  // ---- GOLDEN APPLE ----
+  if(!golden && now>=nextGoldenAt){
+    for(let tries=0;tries<40;tries++){
+      const p=randSafeCell();
+      if(isStorm(p.x,p.y)) continue;
+      if(foods.some(f=>f.x===p.x&&f.y===p.y)) continue;
+      golden={x:p.x,y:p.y,until:now+GOLDEN_LIFE}; break;
+    }
+  } else if(golden && now>=golden.until){ golden=null; nextGoldenAt=now+GOLDEN_EVERY; }
+}
+// called from stepSnake when a head lands on the golden apple
+function tryGolden(s,nx,ny){
+  if(golden && golden.x===nx && golden.y===ny){
+    golden=null; nextGoldenAt=now+GOLDEN_EVERY;
+    s.pendingGrow+=GOLDEN_GROW; s.score+=5;
+    addFeed("gift", players.get(s.id)||{name:s.name,avatar:s.avatar}, "🍎 "+s.name+" grabbed the GOLDEN APPLE! +"+GOLDEN_GROW);
+    ping("gift"); return true;
+  }
+  return false;
+}
+
+function drawHazards(){
+  const M = IS_CONTROL ? mMeteor : meteor;
+  const BS = IS_CONTROL ? mBolts : bolts;
+  const G = IS_CONTROL ? mGolden : golden;
+  // lightning
+  for(const b of BS){
+    const warn = now<b.warnUntil, strike = now>=b.warnUntil && now<b.strikeUntil;
+    if(!warn && !strike) continue;
+    ctx.save();
+    for(const c of b.cells){ const p=c2p(c[0],c[1]);
+      if(strike){ ctx.fillStyle="rgba(180,220,255,.95)"; ctx.shadowColor="#bfe3ff"; ctx.shadowBlur=18; }
+      else { const pl=0.3+0.4*Math.abs(Math.sin(now/70)); ctx.fillStyle=`rgba(120,180,255,${pl*0.4})`; }
+      ctx.fillRect(p.x-cell/2,p.y-cell/2,cell,cell);
+    }
+    ctx.restore();
+  }
+  // golden apple
+  if(G){
+    const p=c2p(G.x,G.y); const pulse=1+0.25*Math.sin(now/160);
+    ctx.save(); ctx.shadowColor="#ffd23f"; ctx.shadowBlur=22;
+    ctx.fillStyle="#ffd23f"; ctx.beginPath(); ctx.arc(p.x,p.y,cell*0.34*pulse,0,7); ctx.fill();
+    ctx.fillStyle="#fff6c8"; ctx.beginPath(); ctx.arc(p.x-cell*0.1,p.y-cell*0.1,cell*0.10,0,7); ctx.fill();
+    ctx.restore();
+  }
+  // meteor
+  if(M && M.phase && M.phase!=="idle"){
+    const p=c2p(M.x,M.y); const R=M.r*cell;
+    if(M.phase==="warn"){
+      const k=1-(M.warnUntil-now)/METEOR_WARN; const pl=0.4+0.5*Math.abs(Math.sin(now/80));
+      ctx.save(); ctx.strokeStyle=`rgba(255,80,40,${pl})`; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.stroke();
+      ctx.fillStyle=`rgba(255,60,30,${0.10+0.12*pl})`; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.fill();
+      // incoming rock
+      const drop = (1-k)* -H*0.6;
+      ctx.fillStyle="#7a4a25"; ctx.shadowColor="#ff7a2a"; ctx.shadowBlur=25;
+      ctx.beginPath(); ctx.arc(p.x, p.y+drop, cell*0.7,0,7); ctx.fill();
+      ctx.restore();
+    } else if(M.phase==="impact"){
+      const age=(now-(M.hitAt||now))/500; const rr=R*(1+age*0.6);
+      ctx.save(); ctx.globalAlpha=Math.max(0,1-age);
+      ctx.fillStyle="rgba(255,140,40,.85)"; ctx.shadowColor="#ff8a2a"; ctx.shadowBlur=40;
+      ctx.beginPath(); ctx.arc(p.x,p.y,rr,0,7); ctx.fill();
+      ctx.fillStyle="rgba(255,240,180,.9)"; ctx.beginPath(); ctx.arc(p.x,p.y,rr*0.5,0,7); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
 function buildSnapshot(){
   return {
     phase, round,
@@ -1160,6 +1290,9 @@ function buildSnapshot(){
       cells:s.cells.map(c=>[c.x,c.y]), sh:s.shieldUntil>now?1:0, rm:s.rampageUntil>now?1:0 })),
     bird: bird.active ? { cx:bird.cx, cy:bird.cy, dirX:bird.dirX, carry:bird.carrying?1:0, cid:bird.carrying||null } : null,
     warn: birdWarnUntil>now ? 1 : 0,
+    meteor: (meteor.phase&&meteor.phase!=="idle") ? { phase:meteor.phase, x:meteor.x, y:meteor.y, r:meteor.r, warnUntil:meteor.warnUntil, hitAt:meteor.hitAt } : null,
+    bolts: bolts.map(b=>({ cells:b.cells, warnUntil:b.warnUntil, strikeUntil:b.strikeUntil })),
+    golden: golden ? { x:golden.x, y:golden.y } : null,
   };
 }
 function applySnapshot(snap){
@@ -1174,6 +1307,9 @@ function applySnapshot(snap){
   if(snap.bird){ bird.active=true; bird.cx=snap.bird.cx; bird.cy=snap.bird.cy; bird.dirX=snap.bird.dirX; bird.carrying=snap.bird.carry?snap.bird.cid:null; }
   else bird.active=false;
   mirrorWarn = !!snap.warn;
+  mMeteor = snap.meteor || null;
+  mBolts = snap.bolts || [];
+  mGolden = snap.golden || null;
   safe = snap.safe || safe;
   roundRoster = new Array(snap.total||0);
   foods = (snap.foods||[]).map(a=>({x:a[0],y:a[1]}));
