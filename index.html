@@ -56,6 +56,14 @@
   .btn.primary{background:linear-gradient(180deg,var(--magenta),#d31659); border-color:#ff5c92; color:#fff}
   .btn.go{background:linear-gradient(180deg,var(--lime),#8fd400); border-color:#d9ff7a; color:#111}
   .btn.ghost{background:transparent}
+  .btn.fx{background:#241a3e; border-color:#4a2f7a; font-size:12px; padding:7px 10px}
+  .btn.fx:hover{background:#33245a; border-color:#7a4fc0}
+  #clearBtn{border-color:#7a2f3a; color:#ffb3c0}
+  #clearBtn:hover{background:#3a1a22}
+  .fxlabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .player{position:relative}
+  .kickBtn{margin-left:2px; width:20px;height:20px;flex:none; border-radius:50%; border:1px solid #7a2f3a; background:#2a1420; color:#ff8095; font-size:11px; line-height:1; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center}
+  .kickBtn:hover{background:#4a1f2e; color:#fff}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;box-shadow:0 0 8px currentColor}
   .dot.on{background:var(--ok);color:var(--ok)}
   .dot.wait{background:var(--gold);color:var(--gold);animation:pulse 1s infinite}
@@ -199,6 +207,12 @@
     <span class="sep"></span>
     <button class="btn go" id="startBtn">Start now</button>
     <button class="btn" id="skipBtn">Skip round</button>
+    <button class="btn" id="clearBtn" title="remove everyone from the lobby">Clear all</button>
+    <span class="sep"></span>
+    <span class="fxlabel">Test FX:</span>
+    <button class="btn fx" id="fxBoost" title="apply a boost to a player">⚡ Boost</button>
+    <button class="btn fx" id="fxShield" title="apply a shield to a player">🛡 Shield</button>
+    <button class="btn fx" id="fxRampage" title="trigger rampage on a player">🔥 Rampage</button>
     <span class="sep"></span>
     <label class="toggle"><input type="checkbox" id="simChk" /> Test bots</label>
     <button class="btn ghost" id="soundBtn" title="sound">🔇</button>
@@ -263,6 +277,16 @@ const CONFIG = {
   sbAnon: params.get("key") || (window.SB_ANON || ""),
 };
 if(params.get("bg")==="transparent") document.body.classList.add("transparent");
+
+/* ============================ ROLE (sync) ============================ */
+// ?role=engine  -> runs the game (put THIS in OBS). Obeys remote commands, broadcasts state.
+// ?role=control -> control panel: mirrors the engine's game + kick / start / Test FX. Sends commands.
+// (no role)     -> "solo": full standalone game with local controls (default / testing).
+const ROLE = (params.get("role")||"solo").toLowerCase();
+const IS_CONTROL = ROLE==="control";     // pure mirror + remote control
+const IS_ENGINE  = ROLE!=="control";     // solo & engine both simulate
+const SHOW_CONTROLS = ROLE==="control" || ROLE==="solo";
+let roomChan=null, lastBroadcast=0;
 
 /* ============================ STATE ============================ */
 let now = performance.now();
@@ -752,7 +776,8 @@ function playerChip(p){
   const av = p.avatar
     ? `<div class="av"><img src="${escapeHtml(p.avatar)}" alt=""></div>`
     : `<div class="av"><span class="letter" style="color:${p.color.glow}">${initial(p.name)}</span></div>`;
-  return `<div class="player">${av}<span class="nm">${escapeHtml(p.name)}</span></div>`;
+  const kick = SHOW_CONTROLS ? `<button class="kickBtn" data-kick="${escapeHtml(p.id)}" title="remove">✕</button>` : "";
+  return `<div class="player">${av}<span class="nm">${escapeHtml(p.name)}</span>${kick}</div>`;
 }
 function renderOverlay(){
   if(phase==="lobby"){
@@ -838,25 +863,27 @@ function loop(){
   now=performance.now();
   const dt=now-lastFrame; lastFrame=now;
 
-  // phase timers
-  if(phase==="lobby"){
-    if(now>=lobbyEndsAt){
-      if(players.size>=CONFIG.minPlayers) startBattle();
-      else lobbyEndsAt=now+8000; // extend, wait for players
+  if(!IS_CONTROL){
+    // phase timers (engine/solo only)
+    if(phase==="lobby"){
+      if(now>=lobbyEndsAt){
+        if(players.size>=CONFIG.minPlayers) startBattle();
+        else lobbyEndsAt=now+8000; // extend, wait for players
+      }
+    } else if(phase==="battle"){
+      while(now-lastTick>=CONFIG.tickMs){ lastTick+=CONFIG.tickMs; tick(); if(phase!=="battle") break; }
+    } else if(phase==="winner"){
+      if(now>=winnerEndsAt) startLobby();
     }
-  } else if(phase==="battle"){
-    while(now-lastTick>=CONFIG.tickMs){ lastTick+=CONFIG.tickMs; tick(); if(phase!=="battle") break; }
-  } else if(phase==="winner"){
-    if(now>=winnerEndsAt) startLobby();
   }
   updateConfetti(dt);
 
   // HUD
   document.getElementById("phasePill").textContent = phase==="battle"?"BATTLE":phase.toUpperCase();
-  document.getElementById("aliveNum").textContent = phase==="battle"? aliveSnakes().length : players.size;
-  document.getElementById("totalNum").textContent = phase==="battle"? roundRoster.length : players.size;
+  document.getElementById("aliveNum").textContent = IS_CONTROL ? mirrorAlive : (phase==="battle"? aliveSnakes().length : players.size);
+  document.getElementById("totalNum").textContent = IS_CONTROL ? mirrorTotal : (phase==="battle"? roundRoster.length : players.size);
   const stormWrap=document.getElementById("stormWrap");
-  if(phase==="battle"){ stormWrap.style.display="block"; document.getElementById("stormFill").style.width=(stormT()*100).toFixed(0)+"%"; }
+  if(phase==="battle"){ stormWrap.style.display="block"; document.getElementById("stormFill").style.width=((IS_CONTROL?mirrorStorm:stormT())*100).toFixed(0)+"%"; }
   else stormWrap.style.display="none";
 
   // draw
@@ -867,6 +894,13 @@ function loop(){
   if(phase==="winner") drawConfetti();
 
   updateOverlayLive();
+
+  // engine broadcasts state to any control panels (throttled)
+  if(IS_ENGINE && roomChan && now-lastBroadcast>120){
+    lastBroadcast=now;
+    try{ roomChan.send({ type:"broadcast", event:"state", payload:buildSnapshot() }); }catch(_){}
+  }
+
   requestAnimationFrame(loop);
 }
 
@@ -906,24 +940,107 @@ function connectSupabase(){
   if(!window.supabase || !window.supabase.createClient){ setStatus("error","supabase-js failed to load"); return false; }
   try{
     sb = window.supabase.createClient(CONFIG.sbUrl, CONFIG.sbAnon, { realtime:{ params:{ eventsPerSecond:20 } } });
-    setStatus("connecting","Connecting to Supabase…");
-    sbChan = sb.channel("snake-events")
-      .on("postgres_changes", { event:"INSERT", schema:"public", table:"events" }, (msg)=>{
-        const r = msg.new || {};
-        const stableId = r.user_id || ("name_" + String(r.user_name||"anon").toLowerCase().replace(/\s+/g,"_"));
-        const user = { id:stableId, name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(stableId, r.user_name||"viewer") };
-        const payload = (r.payload && typeof r.payload==="object") ? r.payload : {};
-        if(r.kind) handleEvent(r.kind, user, payload);
-      })
-      .subscribe((st)=>{
-        if(st==="SUBSCRIBED") setStatus("connected","Live via Supabase Realtime");
-        else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT") setStatus("error","Supabase realtime error — retrying…");
-      });
+    setStatus("connecting", IS_CONTROL ? "Connecting control panel…" : "Connecting to Supabase…");
+    if(IS_ENGINE){
+      sbChan = sb.channel("snake-events")
+        .on("postgres_changes", { event:"INSERT", schema:"public", table:"events" }, (msg)=>{
+          const r = msg.new || {};
+          const stableId = r.user_id || ("name_" + String(r.user_name||"anon").toLowerCase().replace(/\s+/g,"_"));
+          const user = { id:stableId, name:r.user_name||"viewer", avatar:r.user_avatar||botAvatar(stableId, r.user_name||"viewer") };
+          const payload = (r.payload && typeof r.payload==="object") ? r.payload : {};
+          if(r.kind) handleEvent(r.kind, user, payload);
+        })
+        .subscribe((st)=>{
+          if(st==="SUBSCRIBED") setStatus("connected", ROLE==="engine" ? "Engine live · viewers can join" : "Live via Supabase Realtime");
+          else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT") setStatus("error","Supabase realtime error — retrying…");
+        });
+    } else {
+      sbChan = { }; // control panel doesn't ingest events
+      setStatus("connected","Control panel · driving the engine");
+    }
+    connectRoom();
     return true;
   }catch(e){ setStatus("error","Supabase init failed: "+(e&&e.message||e)); return false; }
 }
 
-/* ============================ TEST BOTS (works fully offline) ============================ */
+/* ============================ ROOM SYNC (engine <-> control) ============================ */
+let mirrorStorm=0, mirrorAlive=0, mirrorTotal=0;
+function buildSnapshot(){
+  return {
+    phase, round,
+    secsLeft: phase==="lobby" ? Math.max(0, Math.ceil((lobbyEndsAt-now)/1000)) : 0,
+    winner: winner ? { name:winner.name, avatar:winner.avatar, len:(winner.cells?winner.cells.length:0), score:winner.score||0, beat:Math.max(0,roundRoster.length-1) } : null,
+    roster: [...players.values()].map(p=>({ id:p.id, name:p.name, avatar:p.avatar })),
+    alive: aliveSnakes().length, total: (phase==="battle"?roundRoster.length:players.size),
+    storm: stormT(),
+    safe: { x0:safe.x0, y0:safe.y0, x1:safe.x1, y1:safe.y1 },
+    foods: foods.map(f=>[f.x,f.y]),
+    snakes: snakes.map(s=>({ id:s.id, name:s.name, avatar:s.avatar, alive:s.alive,
+      cells:s.cells.map(c=>[c.x,c.y]), sh:s.shieldUntil>now?1:0, rm:s.rampageUntil>now?1:0 })),
+  };
+}
+function applySnapshot(snap){
+  if(!snap) return;
+  phase=snap.phase; round=snap.round||0;
+  winner = snap.winner ? { name:snap.winner.name, avatar:snap.winner.avatar, cells:new Array(snap.winner.len||0), score:snap.winner.score||0 } : null;
+  lobbyEndsAt = now + (snap.secsLeft||0)*1000;
+  players.clear();
+  for(const r of (snap.roster||[])) players.set(r.id, { id:r.id, name:r.name, avatar:r.avatar, color:colorFor(r.id), likeAccum:0 });
+  lastRosterCount=-1;
+  mirrorAlive=snap.alive||0; mirrorTotal=snap.total||0; mirrorStorm=snap.storm||0;
+  safe = snap.safe || safe;
+  roundRoster = new Array(snap.total||0);
+  foods = (snap.foods||[]).map(a=>({x:a[0],y:a[1]}));
+  snakes = (snap.snakes||[]).map(o=>{
+    const cells=(o.cells||[]).map(a=>({x:a[0],y:a[1]}));
+    return { id:o.id, name:o.name, avatar:o.avatar, color:colorFor(o.id),
+      cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0]||{x:0,y:0}, dir:{x:1,y:0},
+      alive:o.alive, deadAt:0, score:0, pendingGrow:0, boostSteps:0,
+      shieldUntil:o.sh?now+99999:0, rampageUntil:o.rm?now+99999:0 };
+  });
+}
+// Commands from the control panel, executed on the engine.
+function applyCommand(c){
+  if(!c||!IS_ENGINE) return;
+  if(c.type==="kick"){ players.delete(c.id); const i=snakes.findIndex(s=>s.id===c.id); if(i>=0) snakes.splice(i,1); lastRosterCount=-1; }
+  else if(c.type==="clear"){ players.clear(); snakes=[]; lastRosterCount=-1; }
+  else if(c.type==="start"){ if(phase==="lobby" && players.size>=1) startBattle(); else if(phase==="winner") startLobby(); }
+  else if(c.type==="skip"){ if(phase==="battle"){ snakes.forEach((s,i)=>{ if(i>0) s.alive=false; }); } else if(phase==="lobby"){ lobbyEndsAt=now; } }
+  else if(c.type==="fx"){ fireTestFX(c.effect, c.id); }
+}
+function sendCommand(c){
+  if(roomChan){ try{ roomChan.send({ type:"broadcast", event:"cmd", payload:c }); }catch(_){} }
+  if(IS_ENGINE) applyCommand(c); // solo applies locally too
+}
+// Apply a test effect to a specific player (or a random one) so effects can be verified on demand.
+function fireTestFX(effect, id){
+  let targetId=id;
+  if(!targetId){
+    const pool = phase==="battle" ? aliveSnakes().map(s=>s.id) : [...players.keys()];
+    if(!pool.length){ // nobody in — drop a test player in first
+      const tid="test_"+((Math.random()*1e6)|0);
+      handleEvent("chat",{id:tid,name:"FX Test",avatar:botAvatar(tid,"FX Test")},{comment:"join"});
+      targetId=tid;
+    } else targetId=pool[(Math.random()*pool.length)|0];
+  }
+  const p=players.get(targetId); if(!p) return;
+  const u={id:p.id,name:p.name,avatar:p.avatar};
+  if(effect==="boost") handleEvent("like",u,{likeCount:20});
+  else if(effect==="shield") handleEvent("share",u,{});
+  else if(effect==="rampage") handleEvent("gift",u,{giftName:"Test",diamonds:100,repeat:1});
+}
+function connectRoom(){
+  if(!sb) return;
+  roomChan = sb.channel("snake-room", { config:{ broadcast:{ self:false } } });
+  if(IS_CONTROL){
+    roomChan.on("broadcast", { event:"state" }, (m)=>{ applySnapshot(m.payload); });
+  } else {
+    roomChan.on("broadcast", { event:"cmd" }, (m)=>{ applyCommand(m.payload); });
+  }
+  roomChan.subscribe();
+}
+
+
 let simOn=false, simTimers=[];
 const botNames=["Ava","Kai","Zoe","Milo","Nova","Rex","Luna","Finn","Iris","Dex","Remy","Sage","Juno","Cleo","Bo","Wren","Otis","Pia","Ken","Suki","Yuki","Marc","Tia","Ozzy","Q","Rio","Vee","Nix","Lux","Ivy"];
 function spawnBotOnce(){
@@ -965,13 +1082,25 @@ $("connectBtn").onclick=()=>{
   if(!ws || ws.readyState>1) connectBridge();
   else ws.send(JSON.stringify({cmd:"connect",username:u}));
 };
-$("startBtn").onclick=()=>{ if(phase==="lobby" && players.size>=1) startBattle(); else if(phase==="winner") startLobby(); };
-$("skipBtn").onclick=()=>{ if(phase==="battle"){ // force end
+$("startBtn").onclick=()=>{ IS_CONTROL ? sendCommand({type:"start"}) : (phase==="lobby" && players.size>=1 ? startBattle() : phase==="winner" ? startLobby() : null); };
+$("skipBtn").onclick=()=>{
+  if(IS_CONTROL){ sendCommand({type:"skip"}); return; }
+  if(phase==="battle"){ // force end
     if(aliveSnakes().length){ let b=aliveSnakes()[0]; for(const s of aliveSnakes()) if(s.score>b.score)b=s; while(aliveSnakes().length>1){ for(const s of aliveSnakes()) if(s!==b) killSnake(s); } }
     endBattle();
   } else if(phase==="lobby"){ if(players.size>=1) startBattle(); }
   else if(phase==="winner"){ startLobby(); }
 };
+$("clearBtn").onclick=()=>{ if(IS_CONTROL) sendCommand({type:"clear"}); else applyCommand({type:"clear"}); };
+$("fxBoost").onclick=()=>{ IS_CONTROL ? sendCommand({type:"fx",effect:"boost"}) : fireTestFX("boost"); };
+$("fxShield").onclick=()=>{ IS_CONTROL ? sendCommand({type:"fx",effect:"shield"}) : fireTestFX("shield"); };
+$("fxRampage").onclick=()=>{ IS_CONTROL ? sendCommand({type:"fx",effect:"rampage"}) : fireTestFX("rampage"); };
+// kick: event-delegate clicks on the lobby roster (the ✕ buttons)
+overlay.addEventListener("click",(e)=>{
+  const b=e.target.closest("[data-kick]"); if(!b) return;
+  const id=b.getAttribute("data-kick");
+  if(IS_CONTROL) sendCommand({type:"kick",id}); else applyCommand({type:"kick",id});
+});
 $("simChk").onchange=e=>{ if(e.target.checked) startSim(); else stopSim(); };
 $("soundBtn").onclick=e=>{ soundOn=!soundOn; e.target.textContent=soundOn?"🔊":"🔇"; if(soundOn) beep(440,.08,"sine",.03); };
 $("hideBtn").onclick=()=>toggleControls(false);
@@ -1012,7 +1141,8 @@ $("setSave").onclick=()=>{
 /* ============================ BOOT ============================ */
 function boot(){
   resize();
-  if(params.get("hud")==="min") toggleControls(false);
+  // Engine role = the OBS overlay: hide host controls. Control/solo show them.
+  if(!SHOW_CONTROLS || params.get("hud")==="min") toggleControls(false);
   const u=params.get("user"); if(u){ $("userInput").value=u.replace(/^@/,""); }
   startLobby();
   requestAnimationFrame(loop);
