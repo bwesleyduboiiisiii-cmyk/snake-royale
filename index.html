@@ -61,6 +61,7 @@
   #clearBtn{border-color:#7a2f3a; color:#ffb3c0}
   #clearBtn:hover{background:#3a1a22}
   .fxlabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .miniSel{background:#1a1a44;color:var(--ink);border:1px solid #33336b;border-radius:7px;padding:4px 6px;font-family:var(--ui);font-size:12px;cursor:pointer}
   .player{position:relative}
   .kickBtn{margin-left:2px; width:20px;height:20px;flex:none; border-radius:50%; border:1px solid #7a2f3a; background:#2a1420; color:#ff8095; font-size:11px; line-height:1; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center}
   .kickBtn:hover{background:#4a1f2e; color:#fff}
@@ -215,6 +216,15 @@
     <button class="btn fx" id="fxShield" title="apply a shield to a player">🛡 Shield</button>
     <button class="btn fx" id="fxRampage" title="trigger rampage on a player">🔥 Rampage</button>
     <span class="sep"></span>
+    <label class="toggle" style="gap:4px">Difficulty
+      <select id="diffSel" class="miniSel">
+        <option value="chill">Chill</option>
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+        <option value="insane">Insane</option>
+      </select>
+    </label>
+    <span class="sep"></span>
     <label class="toggle"><input type="checkbox" id="simChk" /> Test bots</label>
     <button class="btn ghost" id="soundBtn" title="sound">🔇</button>
     <button class="btn ghost" id="gearBtn" title="settings">⚙</button>
@@ -272,12 +282,30 @@ const CONFIG = {
   hardCapSec:135,
   joinWords:["join","play","snake"],
   autoJoin:false,
+  difficulty:"hard",   // chill | normal | hard | insane
+  aiCaution:0.28,      // lower = snakes take more risks / trap themselves more
+  aiJitter:0.9,        // higher = more erratic movement
   wsUrl: params.get("ws") || "ws://localhost:8081",
   // Supabase (cloud mode). Fill SB_URL/SB_ANON below, or pass ?sb=...&key=... in the URL.
   sbUrl: params.get("sb") || (window.SB_URL || ""),
   sbAnon: params.get("key") || (window.SB_ANON || ""),
 };
 if(params.get("bg")==="transparent") document.body.classList.add("transparent");
+
+/* ============================ DIFFICULTY ============================ */
+// Snakes auto-play; difficulty scales speed, how fast the storm closes, and how reckless they are.
+const DIFF={
+  chill:  { tickMs:130, stormStartSec:25, stormFullSec:120, aiCaution:0.8,  aiJitter:0.3 },
+  normal: { tickMs:110, stormStartSec:15, stormFullSec:95,  aiCaution:0.5,  aiJitter:0.6 },
+  hard:   { tickMs:90,  stormStartSec:10, stormFullSec:70,  aiCaution:0.28, aiJitter:0.9 },
+  insane: { tickMs:70,  stormStartSec:6,  stormFullSec:50,  aiCaution:0.12, aiJitter:1.3 },
+};
+function setDifficulty(level){
+  const d=DIFF[level]||DIFF.hard; CONFIG.difficulty=DIFF[level]?level:"hard";
+  CONFIG.tickMs=d.tickMs; CONFIG.stormStartSec=d.stormStartSec; CONFIG.stormFullSec=d.stormFullSec;
+  CONFIG.aiCaution=d.aiCaution; CONFIG.aiJitter=d.aiJitter;
+  const sel=document.getElementById("diffSel"); if(sel) sel.value=CONFIG.difficulty;
+}
 
 /* ============================ ROLE (sync) ============================ */
 // ?role=engine  -> runs the game (put THIS in OBS). Obeys remote commands, broadcasts state.
@@ -547,8 +575,8 @@ function chooseDir(s,occ){
     // pull toward center as storm tightens
     score -= pull*8 * ((Math.abs((nx+0.5)-CONFIG.COLS/2)+Math.abs((ny+0.5)-CONFIG.ROWS/2))/(CONFIG.COLS+CONFIG.ROWS));
     if(d.x===s.dir.x && d.y===s.dir.y) score+=0.7;      // momentum
-    if(!outWall) score += freeNeighbors(nx,ny,occ)*0.5;  // avoid dead ends
-    score += Math.random()*0.6;
+    if(!outWall) score += freeNeighbors(nx,ny,occ)*CONFIG.aiCaution;  // dead-end avoidance (difficulty)
+    score += Math.random()*CONFIG.aiJitter;
     if(score>bestScore){ bestScore=score; best=d; }
   }
   return best;
@@ -1013,6 +1041,7 @@ function applyCommand(c){
   else if(c.type==="start"){ if(phase==="lobby" && players.size>=1) startBattle(); else if(phase==="winner") startLobby(); }
   else if(c.type==="skip"){ if(phase==="battle"){ snakes.forEach((s,i)=>{ if(i>0) s.alive=false; }); } else if(phase==="lobby"){ lobbyEndsAt=now; } }
   else if(c.type==="fx"){ fireTestFX(c.effect, c.id); }
+  else if(c.type==="diff"){ setDifficulty(c.level); }
 }
 function sendCommand(c){
   if(roomChan){ try{ roomChan.send({ type:"broadcast", event:"cmd", payload:c }); }catch(_){} }
@@ -1108,6 +1137,7 @@ overlay.addEventListener("click",(e)=>{
   if(IS_CONTROL) sendCommand({type:"kick",id}); else applyCommand({type:"kick",id});
 });
 $("simChk").onchange=e=>{ if(e.target.checked) startSim(); else stopSim(); };
+$("diffSel").onchange=e=>{ const lvl=e.target.value; if(IS_CONTROL) sendCommand({type:"diff",level:lvl}); else setDifficulty(lvl); };
 $("soundBtn").onclick=e=>{ soundOn=!soundOn; e.target.textContent=soundOn?"🔊":"🔇"; if(soundOn) beep(440,.08,"sine",.03); };
 $("hideBtn").onclick=()=>toggleControls(false);
 $("showBar").onclick=()=>toggleControls(true);
@@ -1147,6 +1177,7 @@ $("setSave").onclick=()=>{
 /* ============================ BOOT ============================ */
 function boot(){
   resize();
+  setDifficulty(CONFIG.difficulty);
   // Engine role = the OBS overlay: hide host controls. Control/solo show them.
   if(!SHOW_CONTROLS || params.get("hud")==="min") toggleControls(false);
   const u=params.get("user"); if(u){ $("userInput").value=u.replace(/^@/,""); }

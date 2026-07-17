@@ -54,15 +54,41 @@ async function post(kind, user, payload) {
   }
 }
 
+function deepFind(obj, keys, depth){
+  // breadth-first search for the first non-empty value under any of `keys`
+  if(!obj || typeof obj!=="object" || depth>4) return "";
+  for(const k of keys){ if(obj[k]!=null && obj[k]!=="" && typeof obj[k]!=="object") return obj[k]; }
+  for(const v of Object.values(obj)){
+    if(v && typeof v==="object"){ const r=deepFind(v, keys, depth+1); if(r) return r; }
+  }
+  return "";
+}
+function pickAvatar(u){
+  const cands=[u.profilePicture, u.avatarThumb, u.avatarMedium, u.avatarLarger, u.avatar];
+  for(const c of cands){
+    if(!c) continue;
+    if(typeof c==="string" && c.startsWith("http")) return c;
+    if(c.url) return c.url;
+    if(Array.isArray(c.urls) && c.urls[0]) return c.urls[0];
+    if(Array.isArray(c.urlList) && c.urlList[0]) return c.urlList[0];
+    if(Array.isArray(c) && typeof c[0]==="string") return c[0];
+  }
+  // last resort: any http string that looks like an avatar url anywhere in the object
+  const any=deepFind(u, ["url"], 0);
+  return (typeof any==="string" && any.startsWith("http")) ? any : "";
+}
 function mkUser(d) {
   const u = (d && d.user) || d || {};
-  const pic = u.profilePicture;
-  const avatar = (pic && (pic.url || (Array.isArray(pic.urls) && pic.urls[0]) || (Array.isArray(pic) && pic[0]))) || u.avatarThumb || "";
-  // TikTok exposes the id under several names; uniqueId (@handle) is a reliable stable fallback.
-  const rawId = u.userId || u.uniqueId || u.secUid || u.id || (d && d.userId) || "";
+  const avatar = pickAvatar(u) || pickAvatar(d||{});
+  // Prefer the @username (uniqueId) — it's stable and unique. Fall back to numeric id, then deep search.
+  const uniqueId = u.uniqueId || u.unique_id || (d && d.uniqueId) || deepFind(u, ["uniqueId","unique_id"], 0) || "";
+  const numId    = u.userId || u.user_id || u.secUid || u.id || (d && d.userId) || deepFind(u, ["userId","user_id","secUid"], 0) || "";
+  const nickname = u.nickname || u.nickName || (d && d.nickname) || deepFind(u, ["nickname","nickName"], 0) || "";
+  const id = String(uniqueId || numId || "");
   return {
-    id:     rawId ? String(rawId) : "",
-    name:   u.nickname || u.uniqueId || "viewer",
+    id,
+    uniqueId: String(uniqueId||""),
+    name:   nickname || uniqueId || "viewer",
     avatar: typeof avatar === "string" ? avatar : "",
   };
 }
@@ -112,8 +138,10 @@ conn.on(WebcastEvent.MEMBER, (d) => {
   post("join", mkUser(d), {});
 });
 
+let _dumped = 0;
 conn.on(WebcastEvent.CHAT, (d) => {
   const comment = d.comment || d.content || "";
   if (!comment) return;
+  if (_dumped < 2) { _dumped++; console.log("\n===== RAW CHAT #" + _dumped + " (paste this to your dev) =====\n" + JSON.stringify(d, (k,v)=> typeof v==="bigint" ? v.toString() : v).slice(0, 1500) + "\n====================================\n"); }
   post("chat", mkUser(d), { comment });
 });
