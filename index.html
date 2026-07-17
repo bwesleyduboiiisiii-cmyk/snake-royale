@@ -865,6 +865,12 @@ function setStatus(state,msg){
   if(msg) statusText.textContent=msg;
 }
 function connectBridge(){
+  // CLOUD MODE: if Supabase is configured, there is no local bridge — just listen to Realtime.
+  if(CONFIG.sbUrl && CONFIG.sbAnon){
+    if(!sbChan) connectSupabase();
+    else setStatus("connected","Live via Supabase Realtime");
+    return;
+  }
   try{ if(ws) ws.close(); }catch(_){}
   setStatus("connecting","Connecting to bridge…");
   ws=new WebSocket(CONFIG.wsUrl);
@@ -877,7 +883,7 @@ function connectBridge(){
     else if(m.type==="event"){ handleEvent(m.kind, m.user||{}, m); }
   };
 }
-function scheduleReconnect(){ clearTimeout(wsReconnect); wsReconnect=setTimeout(()=>{ if(wantUser||simOn===false) connectBridge(); },3000); }
+function scheduleReconnect(){ clearTimeout(wsReconnect); wsReconnect=setTimeout(()=>{ if((wantUser||simOn===false) && !(CONFIG.sbUrl&&CONFIG.sbAnon)) connectBridge(); },3000); }
 
 /* ============================ SUPABASE REALTIME (cloud mode) ============================ */
 let sb=null, sbChan=null;
