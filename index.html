@@ -650,9 +650,8 @@ function isPetPlayer(p){
 const GREEN_COLOR = { hue:130, body:"hsl(130 80% 50%)", dim:"hsl(130 70% 38%)", glow:"hsl(130 90% 55%)" };
 const GREEN_MATCH = ["lb"];
 function isGreenPlayer(p){
-  const id = String(p&&p.id||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  const nm = String(p&&p.name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  return GREEN_MATCH.includes(id) || GREEN_MATCH.includes(nm);
+  const t=tokensOf(p);
+  return GREEN_MATCH.some(m=>t.includes(m));
 }
 // THE HIGH TABLE gets a silver-coin body (metallic discs drawn on canvas, not emoji).
 const SILVER_COLOR = { hue:210, body:"hsl(210 12% 72%)", dim:"hsl(210 10% 55%)", glow:"hsl(210 20% 82%)" };
@@ -661,13 +660,16 @@ function isCoinPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return COIN_MATCH.some(m=>s.includes(m));
 }
-// ULU gets a flower body. Exact match ("ulu") since the handle is short.
+// ULU gets a flower body. Whole-word match ("ulu") so it catches "Ulu" even with
+// emoji/extra words around it, but won't false-match "lulu".
 const FLOWER_SKIN = ["🌸","🌺","🌼","🌻","🌷","🌹","💐","🏵️"];
 const FLOWER_MATCH = ["ulu"];
+function tokensOf(p){
+  return (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
 function isFlowerPlayer(p){
-  const id = String(p&&p.id||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  const nm = String(p&&p.name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  return FLOWER_MATCH.includes(id) || FLOWER_MATCH.includes(nm);
+  const t=tokensOf(p);
+  return FLOWER_MATCH.some(m=>t.includes(m));
 }
 // KATRINA NOVAK gets a color-changing hearts body.
 const HEART_SKIN = ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💗","💖"];
