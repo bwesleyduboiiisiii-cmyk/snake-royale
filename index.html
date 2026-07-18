@@ -678,6 +678,14 @@ function isHeartPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return HEART_MATCH.some(m=>s.includes(m));
 }
+// CASS ANDRA (Cassandra) gets a dog-paw body that spells GINGY with letter tiles.
+// Pattern repeats: paw + G-I-N-G-Y. Kept in fixed segment order so the name stays legible.
+const GINGY_SKIN = ["🐾","🇬","🇮","🇳","🇬","🇾"];
+const GINGY_MATCH = ["cassandra"];
+function isGingyPlayer(p){
+  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return GINGY_MATCH.some(m=>s.includes(m));
+}
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
 
@@ -798,6 +806,7 @@ function ensurePlayer(user){
   if(isCoinPlayer(p)){ p.color=SILVER_COLOR; p.coin=true; }
   if(isFlowerPlayer(p)){ p.flower=true; }
   if(isHeartPlayer(p)){ p.heart=true; }
+  if(isGingyPlayer(p)){ p.gingy=true; }
   return p;
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
@@ -887,7 +896,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1243,6 +1252,14 @@ function drawSnake(s){
       ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(heart, p.x, p.y);
+    } else if(s.gingy){
+      // dog paws that spell GINGY — fixed order by segment so the name reads correctly.
+      const em = GINGY_SKIN[(i-1) % GINGY_SKIN.length];
+      const size = rBody*(2.4 + 0.18*Math.sin(now/220 + i));
+      ctx.globalAlpha = deadFade*(0.8 + 0.2*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(em, p.x, p.y);
     } else {
       ctx.globalAlpha = deadFade*fade;
       ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
