@@ -630,11 +630,13 @@ function colorFor(id){
 // BLUEFLAME always plays blue with a blue-flame body
 const BLUE_FLAME_COLOR = { hue:210, body:"hsl(210 90% 55%)", dim:"hsl(214 85% 42%)", glow:"hsl(196 100% 62%)" };
 function isBlueflame(name){ return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"").includes("blueflame"); }
-// AMBERKEY44 gets a fruit body: segments render as fruit that cycle & trail behind her head.
+// AMBERKEY44 (display name "🪙Annie_oku☪️💫MOP") gets a fruit body:
+// segments render as fruit that cycle & trail behind her head.
 const FRUIT_SKIN = ["🍎","🍊","🍋","🍇","🍓","🍉","🍒","🍑","🍍","🥝","🍌","🫐","🥭","🍈"];
+const FRUIT_MATCH = ["amberkey44","annieokumop"]; // matches @username OR display name (emoji/symbols stripped)
 function isFruitPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
-  return s.includes("amberkey44");
+  return FRUIT_MATCH.some(m=>s.includes(m));
 }
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
