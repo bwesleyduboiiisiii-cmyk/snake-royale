@@ -645,6 +645,37 @@ function isPetPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return PET_MATCH.some(m=>s.includes(m));
 }
+// LB always plays green with a green glow. Exact match ("lb") since the handle is very short —
+// substring would false-match names like "albert"/"colby".
+const GREEN_COLOR = { hue:130, body:"hsl(130 80% 50%)", dim:"hsl(130 70% 38%)", glow:"hsl(130 90% 55%)" };
+const GREEN_MATCH = ["lb"];
+function isGreenPlayer(p){
+  const id = String(p&&p.id||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const nm = String(p&&p.name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  return GREEN_MATCH.includes(id) || GREEN_MATCH.includes(nm);
+}
+// THE HIGH TABLE gets a silver-coin body (metallic discs drawn on canvas, not emoji).
+const SILVER_COLOR = { hue:210, body:"hsl(210 12% 72%)", dim:"hsl(210 10% 55%)", glow:"hsl(210 20% 82%)" };
+const COIN_MATCH = ["thehightable"];
+function isCoinPlayer(p){
+  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return COIN_MATCH.some(m=>s.includes(m));
+}
+// ULU gets a flower body. Exact match ("ulu") since the handle is short.
+const FLOWER_SKIN = ["🌸","🌺","🌼","🌻","🌷","🌹","💐","🏵️"];
+const FLOWER_MATCH = ["ulu"];
+function isFlowerPlayer(p){
+  const id = String(p&&p.id||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const nm = String(p&&p.name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  return FLOWER_MATCH.includes(id) || FLOWER_MATCH.includes(nm);
+}
+// KATRINA NOVAK gets a color-changing hearts body.
+const HEART_SKIN = ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💗","💖"];
+const HEART_MATCH = ["katrinanovak"];
+function isHeartPlayer(p){
+  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return HEART_MATCH.some(m=>s.includes(m));
+}
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
 
@@ -761,6 +792,10 @@ function ensurePlayer(user){
   if(isBlueflame(p.name)){ p.color=BLUE_FLAME_COLOR; p.blueflame=true; }
   if(isFruitPlayer(p)){ p.fruit=true; }
   if(isPetPlayer(p)){ p.pet=true; }
+  if(isGreenPlayer(p)){ p.color=GREEN_COLOR; p.green=true; }
+  if(isCoinPlayer(p)){ p.color=SILVER_COLOR; p.coin=true; }
+  if(isFlowerPlayer(p)){ p.flower=true; }
+  if(isHeartPlayer(p)){ p.heart=true; }
   return p;
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
@@ -850,7 +885,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1165,6 +1200,47 @@ function drawSnake(s){
       ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(pet, p.x, p.y);
+    } else if(s.green){
+      // solid green body with a green glow on every segment
+      ctx.globalAlpha = deadFade*fade;
+      ctx.shadowColor="rgba(50,230,80,0.9)"; ctx.shadowBlur=14;
+      ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
+      ctx.fillStyle=s.color.body; ctx.fill();
+      ctx.shadowBlur=0;
+    } else if(s.coin){
+      // metallic silver coin per segment, with a moving specular shine
+      const r=rBody*1.15;
+      ctx.globalAlpha = deadFade*(0.82 + 0.18*(1 - i/s.cells.length));
+      const g=ctx.createRadialGradient(p.x-r*0.35,p.y-r*0.35,r*0.1,p.x,p.y,r);
+      g.addColorStop(0,"#ffffff"); g.addColorStop(0.45,"#e6e9ee");
+      g.addColorStop(0.8,"#a9b0bd"); g.addColorStop(1,"#7c8493");
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,7);
+      ctx.fillStyle=g; ctx.shadowColor="rgba(220,230,245,0.6)"; ctx.shadowBlur=8; ctx.fill(); ctx.shadowBlur=0;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*0.96,0,7);
+      ctx.strokeStyle="rgba(120,128,140,0.9)"; ctx.lineWidth=Math.max(1,r*0.12); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*0.6,0,7);
+      ctx.strokeStyle="rgba(255,255,255,0.35)"; ctx.lineWidth=1; ctx.stroke();
+      const sh=now/300 + i*0.6;
+      ctx.beginPath(); ctx.arc(p.x+Math.cos(sh)*r*0.3, p.y+Math.sin(sh)*r*0.3, r*0.18, 0,7);
+      ctx.fillStyle="rgba(255,255,255,0.7)"; ctx.fill();
+    } else if(s.flower){
+      // cycling flower body — same flow/change behavior as the fruit skin.
+      const step = Math.floor(now/220);
+      const flower = FLOWER_SKIN[((i-1) + step) % FLOWER_SKIN.length];
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(flower, p.x, p.y);
+    } else if(s.heart){
+      // color-changing hearts — the cycling emoji set changes the color as they flow.
+      const step = Math.floor(now/200);
+      const heart = HEART_SKIN[((i-1) + step) % HEART_SKIN.length];
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(heart, p.x, p.y);
     } else {
       ctx.globalAlpha = deadFade*fade;
       ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
@@ -1190,6 +1266,18 @@ function drawSnake(s){
   } else if(shielded){
     ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+5,0,7);
     ctx.strokeStyle="rgba(57,224,255,"+(0.6+0.3*Math.sin(now/120))+")"; ctx.lineWidth=3; ctx.stroke();
+  } else if(s.green){
+    // soft pulsing green halo around the head
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+7+2*Math.sin(now/140),0,7);
+    ctx.fillStyle="rgba(60,230,90,0.22)"; ctx.fill();
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+6,0,7);
+    ctx.strokeStyle="rgba(60,230,90,"+(0.6+0.3*Math.sin(now/130))+")"; ctx.lineWidth=3;
+    ctx.shadowColor="rgba(40,255,90,.9)"; ctx.shadowBlur=14; ctx.stroke(); ctx.shadowBlur=0;
+  } else if(s.coin){
+    // silver halo around the head
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+6,0,7);
+    ctx.strokeStyle="rgba(220,226,236,"+(0.55+0.3*Math.sin(now/150))+")"; ctx.lineWidth=3;
+    ctx.shadowColor="rgba(230,236,246,.85)"; ctx.shadowBlur=13; ctx.stroke(); ctx.shadowBlur=0;
   }
   // ring
   ctx.beginPath(); ctx.arc(hp.x,hp.y,rHead+2,0,7);
