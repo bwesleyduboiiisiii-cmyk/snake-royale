@@ -638,6 +638,13 @@ function isFruitPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return FRUIT_MATCH.some(m=>s.includes(m));
 }
+// YAHZE (display name "🪙©️©️Yahze🛐💙") gets a cats-and-dogs body.
+const PET_SKIN = ["🐶","🐱","🐕","🐈","🐩","🐾"];
+const PET_MATCH = ["yahze"]; // matches @username OR display name (emoji/symbols stripped)
+function isPetPlayer(p){
+  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return PET_MATCH.some(m=>s.includes(m));
+}
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
 
@@ -753,6 +760,7 @@ function ensurePlayer(user){
   }
   if(isBlueflame(p.name)){ p.color=BLUE_FLAME_COLOR; p.blueflame=true; }
   if(isFruitPlayer(p)){ p.fruit=true; }
+  if(isPetPlayer(p)){ p.pet=true; }
   return p;
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
@@ -842,7 +850,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1148,6 +1156,15 @@ function drawSnake(s){
       ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(fruit, p.x, p.y);
+    } else if(s.pet){
+      // cycling cats-and-dogs body — same flow/change behavior as the fruit skin.
+      const step = Math.floor(now/220);
+      const pet = PET_SKIN[((i-1) + step) % PET_SKIN.length];
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(pet, p.x, p.y);
     } else {
       ctx.globalAlpha = deadFade*fade;
       ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
