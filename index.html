@@ -632,19 +632,23 @@ function colorFor(id){
 // BLUEFLAME always plays blue with a blue-flame body
 const BLUE_FLAME_COLOR = { hue:210, body:"hsl(210 90% 55%)", dim:"hsl(214 85% 42%)", glow:"hsl(196 100% 62%)" };
 function isBlueflame(name){ return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"").includes("blueflame"); }
+// Shared normalizer for skin matching. NFKC folds fancy Unicode fonts (𝕋ℝ𝔸ℂ𝕀, ℭ𝔞𝔱𝔣𝔦𝔰𝔥, etc.)
+// back to plain letters, then we strip everything but a-z0-9.
+function skinKey(p){ return (String(p&&p.id||"")+" "+String(p&&p.name||"")).normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,""); }
+function skinTokens(p){ return (String(p&&p.id||"")+" "+String(p&&p.name||"")).normalize("NFKC").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
 // AMBERKEY44 (display name "🪙Annie_oku☪️💫MOP") gets a fruit body:
 // segments render as fruit that cycle & trail behind her head.
 const FRUIT_SKIN = ["🍎","🍊","🍋","🍇","🍓","🍉","🍒","🍑","🍍","🥝","🍌","🫐","🥭","🍈"];
 const FRUIT_MATCH = ["amberkey44","annieokumop"]; // matches @username OR display name (emoji/symbols stripped)
 function isFruitPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return FRUIT_MATCH.some(m=>s.includes(m));
 }
 // YAHZE (display name "🪙©️©️Yahze🛐💙") gets a cats-and-dogs body.
 const PET_SKIN = ["🐶","🐱","🐕","🐈","🐩","🐾"];
 const PET_MATCH = ["yahze"]; // matches @username OR display name (emoji/symbols stripped)
 function isPetPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return PET_MATCH.some(m=>s.includes(m));
 }
 // LB always plays green with a green glow. Exact match ("lb") since the handle is very short —
@@ -659,16 +663,14 @@ function isGreenPlayer(p){
 const SILVER_COLOR = { hue:210, body:"hsl(210 12% 72%)", dim:"hsl(210 10% 55%)", glow:"hsl(210 20% 82%)" };
 const COIN_MATCH = ["thehightable"];
 function isCoinPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return COIN_MATCH.some(m=>s.includes(m));
 }
 // ULU gets a flower body. Whole-word match ("ulu") so it catches "Ulu" even with
 // emoji/extra words around it, but won't false-match "lulu".
 const FLOWER_SKIN = ["🌸","🌺","🌼","🌻","🌷","🌹","💐","🏵️"];
 const FLOWER_MATCH = ["ulu"];
-function tokensOf(p){
-  return (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-}
+function tokensOf(p){ return skinTokens(p); }
 function isFlowerPlayer(p){
   const t=tokensOf(p);
   return FLOWER_MATCH.some(m=>t.includes(m));
@@ -677,7 +679,7 @@ function isFlowerPlayer(p){
 const HEART_SKIN = ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💗","💖"];
 const HEART_MATCH = ["katrinanovak"];
 function isHeartPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return HEART_MATCH.some(m=>s.includes(m));
 }
 // CASS ANDRA (Cassandra) gets a dog-paw body that spells GINGY with letter tiles.
@@ -685,22 +687,36 @@ function isHeartPlayer(p){
 const GINGY_SKIN = ["🐾","🇬","🇮","🇳","🇬","🇾"];
 const GINGY_MATCH = ["cassandra"];
 function isGingyPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return GINGY_MATCH.some(m=>s.includes(m));
 }
 // KATRINA NOVAK gets a Canadian flag body that spells OH CANADA (flag + letter tiles, fixed order).
 const CANADA_SKIN = ["🇨🇦","🇴","🇭","🇨","🇦","🇳","🇦","🇩","🇦"];
 const CANADA_MATCH = []; // (Katrina moved back to the hearts skin)
 function isCanadaPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return CANADA_MATCH.some(m=>s.includes(m));
 }
 // JOURNEY WITH NIJA gets a candy body.
 const CANDY_SKIN = ["🍬","🍭","🍫","🍩","🍪","🧁","🍡","🍮"];
 const CANDY_MATCH = ["journeywithnija"];
 function isCandyPlayer(p){
-  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  const s = skinKey(p);
   return CANDY_MATCH.some(m=>s.includes(m));
+}
+// TRACI BABY gets a 🖕🏼 body trailing behind her.
+const MIDDLE_SKIN = ["🖕🏼"];
+const MIDDLE_MATCH = ["tracibaby"];
+function isMiddlePlayer(p){
+  const s = skinKey(p);
+  return MIDDLE_MATCH.some(m=>s.includes(m));
+}
+// CATFISH gets a military-themed trail with a bear mixed in.
+const MILITARY_SKIN = ["🪖","🎖️","🐻","🪂","🥾","🛡️","⚔️","🎯","🐻","🎗️"];
+const MILITARY_MATCH = ["catfish"];
+function isMilitaryPlayer(p){
+  const s = skinKey(p);
+  return MILITARY_MATCH.some(m=>s.includes(m));
 }
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
@@ -825,6 +841,8 @@ function ensurePlayer(user){
   if(isGingyPlayer(p)){ p.gingy=true; }
   if(isCanadaPlayer(p)){ p.canada=true; }
   if(isCandyPlayer(p)){ p.candy=true; }
+  if(isMiddlePlayer(p)){ p.middle=true; }
+  if(isMilitaryPlayer(p)){ p.military=true; }
   return p;
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
@@ -916,7 +934,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada, candy:!!p.candy, champ:isChamp,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada, candy:!!p.candy, middle:!!p.middle, military:!!p.military, champ:isChamp,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1300,6 +1318,22 @@ function drawSnake(s){
       ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(candy, p.x, p.y);
+    } else if(s.middle){
+      // 🖕🏼 body — same emoji on every segment.
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(MIDDLE_SKIN[0], p.x, p.y);
+    } else if(s.military){
+      // cycling military trail with a bear mixed in.
+      const step = Math.floor(now/220);
+      const em = MILITARY_SKIN[((i-1) + step) % MILITARY_SKIN.length];
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(em, p.x, p.y);
     } else {
       ctx.globalAlpha = deadFade*fade;
       ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
