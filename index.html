@@ -294,6 +294,7 @@ const CONFIG = {
   minPlayers:2,
   maxPlayers:30,
   startLen:4,
+  champBonusLen:4,   // returning champion starts this many segments longer
   foodCount:14,
   shieldMs:6000,
   rampageMs:6000,
@@ -352,6 +353,7 @@ let phase = "lobby";        // lobby | battle | winner
 let round = 0;
 let lobbyEndsAt = 0, winnerEndsAt = 0, battleStart = 0, lastTick = 0;
 let winner = null;
+let champId = null;   // id of last round's winner (returning champion starts bigger)
 
 const players = new Map();   // id -> {id,name,avatar,color,likeAccum}
 let snakes = [];             // active this round
@@ -902,17 +904,19 @@ function handleEvent(kind,user,payload){
 
 /* ============================ SNAKE ENGINE ============================ */
 function newSnake(p){
+  const isChamp = !!(champId && p.id===champId);
+  const startLen = CONFIG.startLen + (isChamp ? CONFIG.champBonusLen : 0);
   const start=randSafeCell();
   const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   const dir=dirs[(Math.random()*4)|0];
   const cells=[];
-  for(let i=0;i<CONFIG.startLen;i++){
+  for(let i=0;i<startLen;i++){
     cells.push({ x:clamp(start.x - dir.x*i,0,CONFIG.COLS-1), y:clamp(start.y - dir.y*i,0,CONFIG.ROWS-1) });
   }
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada, candy:!!p.candy,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada, candy:!!p.candy, champ:isChamp,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1098,6 +1102,8 @@ function startBattle(){
   updateStorm();
   snakes = roster.map(p=>newSnake(p));
   roundRoster = snakes.slice();
+  const champSnake = champId && snakes.find(s=>s.id===champId);
+  if(champSnake) addFeed("gift", {name:champSnake.name}, "👑 "+champSnake.name+" returns as CHAMPION — starts bigger! Gang up!");
   foods=[]; while(foods.length<CONFIG.foodCount) spawnFood();
   renderOverlay();
   if(snakes.length===1){ endBattle(); }
@@ -1111,6 +1117,7 @@ function endBattle(){
     for(const s of roundRoster){ if(!best || s.score>best.score) best=s; }
     winner=best;
   }
+  champId = winner ? winner.id : null;   // returning champion for next round
   phase="winner";
   // MVP = most kills this round (falls back to the winner)
   mvp=null; let mk=-1;
@@ -1192,7 +1199,7 @@ function drawSnake(s){
   const t = phase==="battle" && s.alive ? clamp((now-lastTick)/CONFIG.tickMs,0,1) : 1;
   const deadFade = s.alive?1: clamp(1-(now-s.deadAt)/650,0,1);
   ctx.globalAlpha = deadFade;
-  const rBody=cell*0.40;
+  const rBody=cell*0.40*(1+Math.min(0.5, Math.max(0, s.cells.length-CONFIG.startLen)*0.015));
   // body (tail -> neck)
   for(let i=s.cells.length-1;i>=1;i--){
     const ic=interpCell(s,i,t); const p=c2p(ic.x,ic.y);
@@ -1303,7 +1310,7 @@ function drawSnake(s){
   ctx.globalAlpha=deadFade;
   // head
   const hc=interpCell(s,0,t); const hp=c2p(hc.x,hc.y);
-  const rHead=cell*0.62;
+  const rHead=cell*0.62*(1+Math.min(0.8, Math.max(0, s.cells.length-CONFIG.startLen)*0.022));
   const shielded=s.shieldUntil>now, rampage=s.rampageUntil>now;
   // aura
   if(rampage){
@@ -1360,6 +1367,13 @@ function drawSnake(s){
     ctx.fillStyle="rgba(6,6,20,0.7)";
     roundRect(hp.x-tw/2-6, hp.y-rHead-20, tw+12, 16, 6); ctx.fill();
     ctx.fillStyle="#eef0ff"; ctx.fillText(label,hp.x,hp.y-rHead-6);
+  }
+  // returning champion crown
+  if(s.champ && s.alive){
+    ctx.globalAlpha=1;
+    ctx.font=Math.round(rHead*1.25)+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+    ctx.textAlign="center"; ctx.textBaseline="bottom";
+    ctx.fillText("👑", hp.x, hp.y-rHead-20);
   }
   ctx.globalAlpha=1;
 }
