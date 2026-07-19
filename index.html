@@ -673,7 +673,7 @@ function isFlowerPlayer(p){
 }
 // KATRINA NOVAK gets a color-changing hearts body.
 const HEART_SKIN = ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💗","💖"];
-const HEART_MATCH = []; // (Katrina moved to the Canada skin)
+const HEART_MATCH = ["katrinanovak"];
 function isHeartPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return HEART_MATCH.some(m=>s.includes(m));
@@ -688,10 +688,17 @@ function isGingyPlayer(p){
 }
 // KATRINA NOVAK gets a Canadian flag body that spells OH CANADA (flag + letter tiles, fixed order).
 const CANADA_SKIN = ["🇨🇦","🇴","🇭","🇨","🇦","🇳","🇦","🇩","🇦"];
-const CANADA_MATCH = ["katrinanovak"];
+const CANADA_MATCH = []; // (Katrina moved back to the hearts skin)
 function isCanadaPlayer(p){
   const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
   return CANADA_MATCH.some(m=>s.includes(m));
+}
+// JOURNEY WITH NIJA gets a candy body.
+const CANDY_SKIN = ["🍬","🍭","🍫","🍩","🍪","🧁","🍡","🍮"];
+const CANDY_MATCH = ["journeywithnija"];
+function isCandyPlayer(p){
+  const s = (String(p&&p.id||"")+" "+String(p&&p.name||"")).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return CANDY_MATCH.some(m=>s.includes(m));
 }
 function initial(name){return (name||"?").trim().charAt(0).toUpperCase()||"?";}
 function hashStr(s){ s=String(s); let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
@@ -815,6 +822,7 @@ function ensurePlayer(user){
   if(isHeartPlayer(p)){ p.heart=true; }
   if(isGingyPlayer(p)){ p.gingy=true; }
   if(isCanadaPlayer(p)){ p.canada=true; }
+  if(isCandyPlayer(p)){ p.candy=true; }
   return p;
 }
 function snakeOf(id){ return snakes.find(s=>s.id===id && s.alive); }
@@ -904,7 +912,7 @@ function newSnake(p){
   return {
     id:p.id, name:p.name, avatar:p.avatar, color:p.color,
     cells, prevCells:cells.map(c=>({x:c.x,y:c.y})), head:cells[0], dir,
-    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada,
+    alive:true, deadAt:0, score:0, pendingGrow:0, boostSteps:0, kills:0, lastKillAt:0, killStreak:0, blueflame:!!p.blueflame, fruit:!!p.fruit, pet:!!p.pet, green:!!p.green, coin:!!p.coin, flower:!!p.flower, heart:!!p.heart, gingy:!!p.gingy, canada:!!p.canada, candy:!!p.candy,
     shieldUntil:0, rampageUntil:0,
   };
 }
@@ -1276,6 +1284,15 @@ function drawSnake(s){
       ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(em, p.x, p.y);
+    } else if(s.candy){
+      // cycling candy body — same flow/change behavior as the fruit skin.
+      const step = Math.floor(now/220);
+      const candy = CANDY_SKIN[((i-1) + step) % CANDY_SKIN.length];
+      const size = rBody*(2.5 + 0.22*Math.sin(now/200 + i));
+      ctx.globalAlpha = deadFade*(0.72 + 0.28*(1 - i/s.cells.length));
+      ctx.font = size+"px 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(candy, p.x, p.y);
     } else {
       ctx.globalAlpha = deadFade*fade;
       ctx.beginPath(); ctx.arc(p.x,p.y,rBody,0,7);
